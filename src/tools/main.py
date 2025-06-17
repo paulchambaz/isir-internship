@@ -7,7 +7,6 @@
 # (at your option) any later version.
 
 import argparse
-import logging
 import pickle
 from pathlib import Path
 
@@ -29,7 +28,10 @@ def train(
     train_env: gym.Env,
     test_env: gym.Env,
     steps: int,
-    evaluation_frequency: int,
+    warmup: int,
+    train_freq: int,
+    gradient_steps: int,
+    test_freq: int,
 ) -> algos.SAC:
     training_steps = 0
     history = {}
@@ -54,16 +56,17 @@ def train(
 
             agent.replay_buffer.push(state, action, reward, next_state, done)
 
-            if training_steps > 5000:
-                agent.update()
+            if training_steps > warmup and training_steps % train_freq == 0:
+                for _ in range(gradient_steps):
+                    agent.update()
 
             state = next_state
             training_steps += 1
             progress.update(1)
 
-            if training_steps % evaluation_frequency == 0:
+            if training_steps % test_freq == 0:
                 results = test(agent, test_env, 10)
-                history[training_steps // evaluation_frequency] = results
+                history[training_steps // test_freq] = results
                 progress.set_postfix(
                     {"eval": get_stats(results), "goals": goal_reached_count}
                 )
@@ -129,17 +132,27 @@ def main() -> None:
     agent = algos.SAC(
         action_dim=train_env.action_space.shape[0],
         state_dim=train_env.observation_space.shape[0],
-        hidden_dims=[256, 256],
+        hidden_dims=[64, 64],
         replay_size=200_000,
-        batch_size=256,
+        batch_size=512,
         q_lr=3e-4,
         policy_lr=3e-4,
         alpha_lr=3e-4,
         tau=0.005,
-        gamma=0.99,
+        gamma=0.9999,
+        alpha=0.1,
     )
 
-    trained_agent, history = train(agent, train_env, test_env, args.steps, 1000)
+    trained_agent, history = train(
+        agent=agent,
+        train_env=train_env,
+        test_env=test_env,
+        steps=args.steps,
+        warmup=2000,
+        train_freq=32,
+        gradient_steps=32,
+        test_freq=1000,
+    )
 
     Path("outputs").mkdir(exist_ok=True)
     with open("outputs/agent.pt", "wb") as f:

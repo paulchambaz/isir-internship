@@ -85,6 +85,7 @@ class SAC:
         alpha_lr: Learning rate for temperature parameter
         tau: Target network soft update coefficient (0 < tau <= 1)
         gamma: Discount factor for future rewards (0 < gamma <= 1)
+        alpha: If None, learn alpha. If float, use fixed alpha value.
         weights: Optional pre-trained network weights dictionary
     """
 
@@ -93,6 +94,7 @@ class SAC:
         "alpha_optimizer",
         "batch_size",
         "gamma",
+        "learn_alpha",
         "log_alpha",
         "policy_network",
         "policy_optimizer",
@@ -120,10 +122,12 @@ class SAC:
         alpha_lr: float,
         tau: float,
         gamma: float,
+        alpha: float | None,
         state: dict | None = None,
     ) -> None:
         self.state_dim = state_dim
         self.action_dim = action_dim
+        self.learn_alpha = alpha is None
 
         self.q_network1 = QNetwork(state_dim, hidden_dims, action_dim)
         self.q_network2 = QNetwork(state_dim, hidden_dims, action_dim)
@@ -136,7 +140,11 @@ class SAC:
         self.q_target_network1.load_state_dict(self.q_network1.state_dict())
         self.q_target_network2.load_state_dict(self.q_network2.state_dict())
 
-        self.log_alpha = nn.Parameter(torch.zeros(1))
+        self.log_alpha = (
+            nn.Parameter(torch.zeros(1))
+            if self.learn_alpha
+            else torch.log(torch.tensor(alpha))
+        )
 
         self.q_optimizer1 = torch.optim.Adam(
             self.q_network1.parameters(), lr=q_lr
@@ -147,7 +155,12 @@ class SAC:
         self.policy_optimizer = torch.optim.Adam(
             self.policy_network.parameters(), lr=policy_lr
         )
-        self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
+
+        self.alpha_optimizer = (
+            torch.optim.Adam([self.log_alpha], lr=alpha_lr)
+            if self.learn_alpha
+            else None
+        )
 
         self.replay_buffer = ReplayBuffer(replay_size)
         self.batch_size = batch_size
@@ -211,10 +224,11 @@ class SAC:
         policy_loss.backward()
         self.policy_optimizer.step()
 
-        alpha_loss = self._compute_alpha_loss(states)
-        self.alpha_optimizer.zero_grad()
-        alpha_loss.backward()
-        self.alpha_optimizer.step()
+        if self.learn_alpha:
+            alpha_loss = self._compute_alpha_loss(states)
+            self.alpha_optimizer.zero_grad()
+            alpha_loss.backward()
+            self.alpha_optimizer.step()
 
         self._soft_update_targets()
 
