@@ -3,7 +3,7 @@
 
 # Run the main program
 run:
-  @uv run python -m tools.main --env pendulum --steps 200000
+  @uv run python -m tools.main --env mountaincar --steps 200000
 
 # Show available commands
 help:

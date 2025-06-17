@@ -149,9 +149,7 @@ class SAC:
         self.policy_optimizer = torch.optim.Adam(
             self.policy_network.parameters(), lr=policy_lr
         )
-        self.alpha_optimizer = torch.optim.Adam(
-            self.policy_network.parameters(), lr=alpha_lr
-        )
+        self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
 
         self.replay_buffer = ReplayBuffer(replay_size)
         self.batch_size = batch_size
@@ -285,7 +283,7 @@ class SAC:
         # EE [ 1/2 * (Q_theta_i (s, a) - y) ]
         q_network = self.q_network1 if network_idx == 1 else self.q_network2
         q_values = q_network(states, actions)
-        return torch.mean(0.5 * (q_values - targets.detach()))
+        return torch.mean(0.5 * (q_values - targets.detach()) ** 2)
 
     def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:
         # pi(s) log pi (pi(s) | s)

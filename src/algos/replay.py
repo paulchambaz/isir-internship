@@ -23,9 +23,9 @@ class ReplayBuffer:
         self,
         state: np.ndarray,
         action: np.ndarray,
-        reward: np.ndarray,
+        reward: float,
         next_state: np.ndarray,
-        done: np.ndarray,
+        done: bool,  # noqa: FBT001
     ) -> None:
         self.buffer.append((state, action, reward, next_state, done))
 
