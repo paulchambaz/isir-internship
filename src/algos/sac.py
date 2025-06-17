@@ -60,7 +60,7 @@ class PolicyNetwork(nn.Module):
         output = self.model(state)
         mean, raw_scale = torch.split(output, self.action_dim, dim=-1)
 
-        log_std = torch.clamp(torch.log(softplus(raw_scale) + 1e-5), -20, 0.5)
+        log_std = torch.clamp(torch.log(softplus(raw_scale) + 1e-5), -20, 2)
 
         return mean, log_std
 
