@@ -24,10 +24,8 @@ class QNetwork(nn.Module):
     ) -> None:
         super().__init__()
         layers = [nn.Linear(state_dim + action_dim, hidden_dims[0]), nn.ReLU()]
-
         for in_dim, out_dim in itertools.pairwise(hidden_dims):
             layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-
         layers.append(nn.Linear(hidden_dims[-1], 1))
 
         self.model = nn.Sequential(*layers)
@@ -41,9 +39,8 @@ class QNetwork(nn.Module):
 
 class PolicyNetwork(nn.Module):
     __slots__ = [
-        "backbone",
-        "log_std_head",
-        "mean_head",
+        "action_dim",
+        "model",
     ]
 
     def __init__(
@@ -53,16 +50,18 @@ class PolicyNetwork(nn.Module):
         layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
         for in_dim, out_dim in itertools.pairwise(hidden_dims):
             layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-        self.backbone = nn.Sequential(*layers)
+        layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
 
-        self.mean_head = nn.Linear(hidden_dims[-1], action_dim)
-        self.log_std_head = nn.Linear(hidden_dims[-1], action_dim)
+        self.model = nn.Sequential(*layers)
+        self.action_dim = action_dim
 
     def forward(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        features = self.backbone(state)
+        output = self.model(state)
+        mean, raw_scale = torch.split(output, self.action_dim, dim=-1)
 
-        mean = self.mean_head(features)
-        log_std = torch.clamp(self.log_std_head(features), -20, 2)
+        log_std = torch.clamp(
+            torch.log(torch.softplus(raw_scale) + 1e-5), -20, 2
+        )
 
         return mean, log_std
 
