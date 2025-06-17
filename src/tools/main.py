@@ -6,6 +6,7 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
+import argparse
 import pickle
 from pathlib import Path
 
@@ -88,7 +89,30 @@ def test(agent: algos.SAC, env: gym.Env, n: int) -> list:
 
 
 def main() -> None:
-    env_name = "MountainCarContinuous-v0"
+    envs = {
+        "mountaincar": "MountainCarContinuous-v0",
+        "pendulum": "Pendulum-v1",
+    }
+
+    parser = argparse.ArgumentParser(description="Test RL algorithms")
+    parser.add_argument(
+        "--env",
+        type=str,
+        choices=envs.keys(),
+        required=True,
+        help="Environment",
+    )
+
+    parser.add_argument(
+        "--steps",
+        type=int,
+        required=False,
+        default=50_000,
+        help="Max number of steps for the experiment",
+    )
+    args = parser.parse_args()
+
+    env_name = envs[args.env]
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
 
@@ -105,7 +129,7 @@ def main() -> None:
         gamma=0.99,
     )
 
-    trained_agent, history = train(agent, train_env, test_env, 200_000, 512)
+    trained_agent, history = train(agent, train_env, test_env, args.steps, 512)
 
     Path("outputs").mkdir(exist_ok=True)
     with open("outputs/agent.pt", "wb") as f:
