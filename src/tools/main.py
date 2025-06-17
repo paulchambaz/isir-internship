@@ -134,7 +134,7 @@ def main() -> None:
         state_dim=train_env.observation_space.shape[0],
         hidden_dims=[64, 64],
         replay_size=200_000,
-        batch_size=512,
+        batch_size=2048,
         q_lr=3e-4,
         policy_lr=3e-4,
         alpha_lr=3e-4,
