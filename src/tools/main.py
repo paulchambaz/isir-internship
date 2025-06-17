@@ -47,7 +47,9 @@ def train(
             done = terminated or truncated
 
             agent.replay_buffer.push(state, action, reward, next_state, done)
-            agent.update()
+
+            if training_steps > 5000:
+                agent.update()
 
             state = next_state
             training_steps += 1
