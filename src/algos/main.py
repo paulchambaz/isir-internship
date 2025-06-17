@@ -74,8 +74,7 @@ def prints() -> None:
 
 
 def main() -> None:
-    prints()
-    test_gymnasium()
+    pass
 
 
 if __name__ == "__main__":

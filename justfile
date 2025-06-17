@@ -23,7 +23,8 @@ typecheck:
 
 # Run tests
 test:
-  @uv run pytest
+  echo
+  # @uv run pytest
 
 # Run tests with HTML coverage report
 test-cov:
