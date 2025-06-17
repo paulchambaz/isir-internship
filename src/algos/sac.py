@@ -20,10 +20,7 @@ class QNetwork(nn.Module):
     __slots__ = ["model"]
 
     def __init__(
-        self,
-        state_dim: int,
-        hidden_dims: list[int],
-        action_dim: int,
+        self, state_dim: int, hidden_dims: list[int], action_dim: int
     ) -> None:
         super().__init__()
         layers = [nn.Linear(state_dim + action_dim, hidden_dims[0]), nn.ReLU()]
@@ -45,18 +42,12 @@ class QNetwork(nn.Module):
 class PolicyNetwork(nn.Module):
     __slots__ = [
         "backbone",
-        "log_std",
         "log_std_head",
-        "log_std_max",
-        "log_std_min",
         "mean_head",
     ]
 
     def __init__(
-        self,
-        state_dim: int,
-        hidden_dims: list[int],
-        action_dim: int,
+        self, state_dim: int, hidden_dims: list[int], action_dim: int
     ) -> None:
         super().__init__()
         layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
@@ -67,20 +58,38 @@ class PolicyNetwork(nn.Module):
         self.mean_head = nn.Linear(hidden_dims[-1], action_dim)
         self.log_std_head = nn.Linear(hidden_dims[-1], action_dim)
 
-        self.log_std_min = -20
-        self.log_std_max = 2
-
     def forward(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         features = self.backbone(state)
+
         mean = self.mean_head(features)
-        log_std = torch.clamp(
-            self.log_std_head(features), self.log_std_min, self.log_std_max
-        )
+        log_std = torch.clamp(self.log_std_head(features), -20, 2)
 
         return mean, log_std
 
 
 class SAC:
+    """
+    Soft Actor-Critic (SAC) algorithm for continuous control tasks.
+
+    SAC is an off-policy actor-critic method based on the maximum entropy
+    reinforcement learning framework. It learns a stochastic policy that
+    maximizes both expected return and entropy to improve exploration and
+    robustness.
+
+    Args:
+        action_dim: Dimensionality of the action space
+        state_dim: Dimensionality of the state space
+        hidden_dims: List of hidden layer sizes for neural networks
+        replay_size: Maximum size of the replay buffer
+        batch_size: Number of samples per training batch
+        q_lr: Learning rate for Q-function networks
+        policy_lr: Learning rate for policy network
+        alpha_lr: Learning rate for temperature parameter
+        tau: Target network soft update coefficient (0 < tau <= 1)
+        gamma: Discount factor for future rewards (0 < gamma <= 1)
+        weights: Optional pre-trained network weights dictionary
+    """
+
     __slots__ = [
         "action_dim",
         "alpha_optimizer",
@@ -113,7 +122,7 @@ class SAC:
         alpha_lr: float,
         tau: float,
         gamma: float,
-        weights: dict | None = None,
+        state: dict | None = None,
     ) -> None:
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -141,7 +150,7 @@ class SAC:
             self.policy_network.parameters(), lr=policy_lr
         )
         self.alpha_optimizer = torch.optim.Adam(
-            self.policy_network.parameters(), lr=policy_lr
+            self.policy_network.parameters(), lr=alpha_lr
         )
 
         self.replay_buffer = ReplayBuffer(replay_size)
@@ -151,39 +160,182 @@ class SAC:
         self.tau = tau
         self.gamma = gamma
 
-        if weights is not None:
-            self.load_from_weights(weights)
+        if state is not None:
+            self.load_from_state(state)
 
     def select_action(
         self, state: np.ndarray, *, evaluation: bool = False
     ) -> np.ndarray:
-        state = torch.as_tensor(state, dtype=torch.float32)
-        mean, log_std = self.policy_network.forward(state)
+        """
+        Selects an action in range [-1, 1] using deterministic mean
+        (evaluation=True) or stochastic sampling (evaluation=False).
 
-        if evaluation:
-            action = mean
-        else:
-            std = log_std.exp()
-            normal = dist.Normal(mean, std)
-            action = normal.rsample()
+        Args:
+            state: Current environment state observation
+            evaluation: Whether to use deterministic (True) or stochastic (False)
+             action selection
+        """
+        state = torch.as_tensor(state, dtype=torch.float32).unsqueeze(0)
+        mean, log_std = self.policy_network(state)
 
-        return np.tanh(action.detach().numpy())
+        action = (
+            mean if evaluation else dist.Normal(mean, log_std.exp()).rsample()
+        )
 
-    def update() -> None:
-        pass
+        return torch.tanh(action).squeeze(0).detach().numpy()
 
-    def get_weights(self) -> dict:
+    def update(self) -> None:
+        """
+        Performs one training step updating Q-networks, policy network, and
+        temperature using replay buffer samples.
+        """
+        if len(self.replay_buffer) < self.batch_size:
+            return
+
+        states, actions, rewards, next_states, dones = (
+            self.replay_buffer.sample(self.batch_size)
+        )
+
+        q1_loss = self._compute_q_loss(
+            states, actions, rewards, next_states, dones, network_idx=1
+        )
+        self.q_optimizer1.zero_grad()
+        q1_loss.backward()
+        self.q_optimizer1.step()
+
+        q2_loss = self._compute_q_loss(
+            states, actions, rewards, next_states, dones, network_idx=2
+        )
+        self.q_optimizer2.zero_grad()
+        q2_loss.backward()
+        self.q_optimizer2.step()
+
+        policy_loss = self._compute_policy_loss(states)
+        self.policy_optimizer.zero_grad()
+        policy_loss.backward()
+        self.policy_optimizer.step()
+
+        alpha_loss = self._compute_alpha_loss(states)
+        self.alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self.alpha_optimizer.step()
+
+        self._soft_update_targets()
+
+    def get_state(self) -> dict:
+        """
+        Returns dictionary containing all agent state for saving or transferring.
+        """
         return {
             "q1": self.q_network1.state_dict(),
             "q2": self.q_network2.state_dict(),
+            "q1_target": self.q_target_network1.state_dict(),
+            "q2_target": self.q_target_network2.state_dict(),
             "policy": self.policy_network.state_dict(),
             "log_alpha": self.log_alpha.item(),
+            "q_optimizer1": self.q_optimizer1.state_dict(),
+            "q_optimizer2": self.q_optimizer2.state_dict(),
+            "policy_optimizer": self.policy_optimizer.state_dict(),
+            "alpha_optimizer": self.alpha_optimizer.state_dict(),
+            "replay_buffer": self.replay_buffer.get_data(),
         }
 
-    def load_from_weights(self, weights: dict) -> None:
-        self.q_network1.load_state_dict(weights["q1"])
-        self.q_network2.load_state_dict(weights["q2"])
-        self.q_target_network1.load_state_dict(weights["q1"])
-        self.q_target_network2.load_state_dict(weights["q2"])
-        self.policy_network.load_state_dict(weights["policy"])
-        self.log_alpha.data = torch.tensor(weights["log_alpha"])
+    def load_from_state(self, state: dict) -> None:
+        """
+        Restores complete agent state from state dictionary.
+
+        Args:
+            state: Dictionary of agent state from get_state
+        """
+        self.q_network1.load_state_dict(state["q1"])
+        self.q_network2.load_state_dict(state["q2"])
+        self.q_target_network1.load_state_dict(state["q1_target"])
+        self.q_target_network2.load_state_dict(state["q2_target"])
+        self.policy_network.load_state_dict(state["policy"])
+        self.log_alpha.data = torch.tensor(state["log_alpha"])
+        self.q_optimizer1.load_state_dict(state["q_optimizer1"])
+        self.q_optimizer2.load_state_dict(state["q_optimizer2"])
+        self.policy_optimizer.load_state_dict(state["policy_optimizer"])
+        self.alpha_optimizer.load_state_dict(state["alpha_optimizer"])
+        self.replay_buffer.load_data(state["replay_buffer"])
+
+    def _compute_q_loss(
+        self,
+        states: torch.Tensor,
+        actions: torch.Tensor,
+        rewards: torch.Tensor,
+        next_states: torch.Tensor,
+        dones: torch.Tensor,
+        network_idx: int,
+    ) -> torch.Tensor:
+        # pi(s'), log pi (pi(s') | s')
+        next_actions, log_probs = self._compute_action_and_log_prob(next_states)
+
+        # min(Q^target_theta_1 (s', a'), Q^target_theta_2 (s', a'))
+        q1_targets = self.q_target_network1(next_states, next_actions)
+        q2_targets = self.q_target_network2(next_states, next_actions)
+        q_targets = torch.min(q1_targets, q2_targets)
+
+        # r + gamma (1 - d) (min Q(s', a') - log pi (a' | s'))
+        alpha = self.log_alpha.exp()
+        targets = rewards + self.gamma * (1.0 - dones.float()) * (
+            q_targets - alpha * log_probs
+        )
+
+        # EE [ 1/2 * (Q_theta_i (s, a) - y) ]
+        q_network = self.q_network1 if network_idx == 1 else self.q_network2
+        q_values = q_network(states, actions)
+        return torch.mean(0.5 * (q_values - targets.detach()))
+
+    def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:
+        # pi(s) log pi (pi(s) | s)
+        actions, log_probs = self._compute_action_and_log_prob(states)
+
+        # min(Q_theta_1 (s, a), Q_theta_2 (s, a))
+        q1_values = self.q_network1(states, actions)
+        q2_values = self.q_network2(states, actions)
+        q_values = torch.min(q1_values, q2_values)
+
+        # EE [ alpha log pi (a | s) - Q (s, a) ]
+        alpha = self.log_alpha.exp()
+        return torch.mean(alpha * log_probs - q_values)
+
+    def _compute_alpha_loss(self, states: torch.Tensor) -> torch.Tensor:
+        # log pi (pi(s) | s)
+        _, log_probs = self._compute_action_and_log_prob(states)
+
+        # EE [ alpha (log pi (a | s) - H) ]
+        alpha = self.log_alpha.exp()
+        return torch.mean(alpha * (log_probs - self.target_entropy))
+
+    def _compute_action_and_log_prob(
+        self, state: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        #  N(mu_theta (s), sigma_theta (s)^2)
+        mean, log_std = self.policy_network(state)
+        gaussian = dist.Normal(mean, log_std.exp())
+
+        # a = tanh(u), u ~ N
+        raw_action = gaussian.rsample()
+        action = torch.tanh(raw_action)
+
+        # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
+        log_prob_gaussian = gaussian.log_prob(raw_action)
+        tanh_correction = torch.log(1 - action.pow(2) + 1e-6)
+        log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
+
+        return action, log_prob
+
+    def _soft_update_targets(self) -> None:
+        network_pairs = [
+            (self.q_target_network1, self.q_network1),
+            (self.q_target_network2, self.q_network2),
+        ]
+
+        for target_net, current_net in network_pairs:
+            for target_param, param in zip(
+                target_net.parameters(), current_net.parameters(), strict=True
+            ):
+                target_param.data.copy_(
+                    self.tau * param.data + (1.0 - self.tau) * target_param.data
+                )

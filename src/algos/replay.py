@@ -35,9 +35,14 @@ class ReplayBuffer:
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
     ]:
         transitions = random.sample(self.buffer, batch_size)
-        return tuple(
-            torch.as_tensor(batch) for batch in zip(*transitions, strict=True)
-        )
+        batches = [np.array(batch) for batch in zip(*transitions, strict=True)]
+        return tuple(torch.from_numpy(batch) for batch in batches)
+
+    def get_data(self) -> list:
+        return list(self.buffer)
+
+    def load_data(self, data: list) -> None:
+        self.buffer = deque(data, maxlen=self.buffer.maxlen)
 
     def __len__(self) -> int:
         return len(self.buffer)
