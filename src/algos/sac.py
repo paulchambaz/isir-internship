@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import torch.distributions as dist
 from torch import nn
+from torch.nn.functional import softplus
 
 from .replay import ReplayBuffer
 
@@ -59,9 +60,7 @@ class PolicyNetwork(nn.Module):
         output = self.model(state)
         mean, raw_scale = torch.split(output, self.action_dim, dim=-1)
 
-        log_std = torch.clamp(
-            torch.log(torch.softplus(raw_scale) + 1e-5), -20, 2
-        )
+        log_std = torch.clamp(torch.log(softplus(raw_scale) + 1e-5), -20, 2)
 
         return mean, log_std
 
