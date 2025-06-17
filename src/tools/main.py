@@ -108,7 +108,7 @@ def main() -> None:
     trained_agent, history = train(agent, train_env, test_env, 200_000, 512)
 
     Path("outputs").mkdir(exist_ok=True)
-    with open("outputs/agent.pk", "wb") as f:
+    with open("outputs/agent.pt", "wb") as f:
         pickle.dump(trained_agent.get_state(), f)
     with open("outputs/history.pk", "wb") as f:
         pickle.dump(history, f)
