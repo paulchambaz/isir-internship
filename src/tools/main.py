@@ -7,6 +7,7 @@
 # (at your option) any later version.
 
 import argparse
+import logging
 import pickle
 from pathlib import Path
 
@@ -33,6 +34,8 @@ def train(
     training_steps = 0
     history = {}
 
+    goal_reached_count = 0
+
     progress = tqdm(range(steps))
 
     while training_steps < steps:
@@ -46,6 +49,9 @@ def train(
             )
             done = terminated or truncated
 
+            if reward > 50:
+                goal_reached_count += 1
+
             agent.replay_buffer.push(state, action, reward, next_state, done)
 
             if training_steps > 5000:
@@ -58,7 +64,9 @@ def train(
             if training_steps % evaluation_frequency == 0:
                 results = test(agent, test_env, 10)
                 history[training_steps // evaluation_frequency] = results
-                progress.set_postfix({"eval": get_stats(results)})
+                progress.set_postfix(
+                    {"eval": get_stats(results), "goals": goal_reached_count}
+                )
 
             if done or training_steps >= steps:
                 break
