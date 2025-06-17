@@ -302,7 +302,7 @@ class SAC:
 
         # EE [ alpha (log pi (a | s) - H) ]
         alpha = self.log_alpha.exp()
-        return torch.mean(alpha * (log_probs - self.target_entropy))
+        return torch.mean(-alpha * (log_probs + self.target_entropy))
 
     def _compute_action_and_log_prob(
         self, state: torch.Tensor

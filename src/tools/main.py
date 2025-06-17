@@ -125,11 +125,11 @@ def main() -> None:
         q_lr=3e-4,
         policy_lr=3e-4,
         alpha_lr=3e-4,
-        tau=0.01,
+        tau=0.005,
         gamma=0.99,
     )
 
-    trained_agent, history = train(agent, train_env, test_env, args.steps, 512)
+    trained_agent, history = train(agent, train_env, test_env, args.steps, 1000)
 
     Path("outputs").mkdir(exist_ok=True)
     with open("outputs/agent.pt", "wb") as f:

@@ -19,7 +19,7 @@ def main() -> None:
     plt.rcParams["text.usetex"] = True
 
     with open("outputs/history.pk", "rb") as f:
-        history = pickle.load(f)
+        history = pickle.load(f)  # noqa: S301
 
     steps = [k * 512 for k in history]
     stats = [compute_stats(results) for results in history.values()]
