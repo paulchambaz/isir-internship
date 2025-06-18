@@ -205,16 +205,12 @@ class SAC:
             self.replay_buffer.sample(self.batch_size)
         )
 
-        q1_loss = self._compute_q_loss(
-            states, actions, rewards, next_states, dones, network_idx=1
+        q1_loss, q2_loss = self._compute_q_loss(
+            states, actions, rewards, next_states, dones
         )
         self.q_optimizer1.zero_grad()
         q1_loss.backward()
         self.q_optimizer1.step()
-
-        q2_loss = self._compute_q_loss(
-            states, actions, rewards, next_states, dones, network_idx=2
-        )
         self.q_optimizer2.zero_grad()
         q2_loss.backward()
         self.q_optimizer2.step()
@@ -282,7 +278,6 @@ class SAC:
         rewards: torch.Tensor,
         next_states: torch.Tensor,
         dones: torch.Tensor,
-        network_idx: int,
     ) -> torch.Tensor:
         # pi(s'), log pi (pi(s') | s')
         next_actions, log_probs = self._compute_action_and_log_prob(next_states)
@@ -293,15 +288,18 @@ class SAC:
         q_targets = torch.min(q1_targets, q2_targets)
 
         # r + gamma (1 - d) (min Q(s', a') - log pi (a' | s'))
-        alpha = self.log_alpha.exp()
+        alpha = self.log_alpha.exp() + 1e-8
         targets = rewards + self.gamma * (1.0 - dones.float()) * (
             q_targets - alpha * log_probs.detach()
         )
 
         # EE [ 1/2 * (Q_theta_i (s, a) - y) ]
-        q_network = self.q_network1 if network_idx == 1 else self.q_network2
-        q_values = q_network(states, actions)
-        return torch.mean(0.5 * (q_values - targets.detach()) ** 2)
+        q1_values = self.q_network1(states, actions)
+        q2_values = self.q_network2(states, actions)
+        return (
+            torch.mean(0.5 * (q1_values - targets.detach()) ** 2),
+            torch.mean(0.5 * (q2_values - targets.detach()) ** 2),
+        )
 
     def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:
         # pi(s) log pi (pi(s) | s)
@@ -313,7 +311,7 @@ class SAC:
         q_values = torch.min(q1_values, q2_values)
 
         # EE [ alpha log pi (a | s) - Q (s, a) ]
-        alpha = self.log_alpha.exp()
+        alpha = self.log_alpha.exp() + 1e-8
         return torch.mean(alpha * log_probs - q_values)
 
     def _compute_alpha_loss(self, states: torch.Tensor) -> torch.Tensor:
@@ -321,7 +319,7 @@ class SAC:
         _, log_probs = self._compute_action_and_log_prob(states)
 
         # EE [ alpha (log pi (a | s) - H) ]
-        alpha = self.log_alpha.exp()
+        alpha = self.log_alpha.exp() + 1e-8
         return torch.mean(-alpha * (log_probs.detach() + self.target_entropy))
 
     def _compute_action_and_log_prob(
@@ -337,8 +335,10 @@ class SAC:
 
         # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
         log_prob_gaussian = gaussian.log_prob(raw_action)
-        tanh_correction = torch.log(1 - action**2 + 1e-6)
-        log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
+        eps = torch.finfo(action.dtype).eps
+        clamped_action = torch.clamp(action, min=-1.0 + eps, max=1.0 - eps)
+        tanh_correction = torch.log1p(-(clamped_action**2))
+        log_prob = (log_prob_gaussian + tanh_correction).sum(dim=-1)
 
         return action, log_prob
 
