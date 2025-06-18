@@ -313,7 +313,7 @@ class SAC:
         q1_values = self.q_network1(states, actions)
         q2_values = self.q_network2(states, actions)
         # q_values = torch.min(q1_values, q2_values)
-        q_values = torch.mean(q1_values, q2_values)
+        q_values = (q1_values + q2_values) / 2.0
 
         # EE [ alpha log pi (a | s) - Q (s, a) ]
         alpha = self.log_alpha.exp()
