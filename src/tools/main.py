@@ -29,7 +29,7 @@ def train(
     gradient_steps: int,
     test_freq: int,
     count: int,
-) -> algos.SAC:
+) -> tuple(algos.SAC, dict):
     history = {}
 
     agent_state = agent.get_state()
@@ -177,7 +177,7 @@ def main() -> None:
         hidden_dims=[64, 64],
         replay_size=200_000,
         batch_size=256,
-        q_lr=3e-4,
+        critic_lr=3e-4,
         policy_lr=3e-4,
         alpha_lr=3e-4,
         tau=0.005,
