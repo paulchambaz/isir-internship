@@ -155,17 +155,17 @@ def main() -> None:
         state_dim=train_env.observation_space.shape[0],
         hidden_dims=[64, 64],
         replay_size=200_000,
-        batch_size=2048,
+        batch_size=256,
         q_lr=3e-4,
         policy_lr=3e-4,
         alpha_lr=3e-4,
         tau=0.005,
-        gamma=0.9999,
-        alpha=0.1,
+        gamma=0.999,
+        alpha=None,
     )
 
     if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=20)
+        expert_transitions = expert_mountaincar(train_env, count=10)
         for state, action, reward, next_state, done in expert_transitions:
             agent.replay_buffer.push(state, action, reward, next_state, done)
 
