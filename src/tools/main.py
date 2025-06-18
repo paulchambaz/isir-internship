@@ -11,8 +11,8 @@ import pickle
 from pathlib import Path
 
 import gymnasium as gym
-from tqdm import tqdm
 import numpy as np
+from tqdm import tqdm
 
 import algos
 
@@ -165,9 +165,8 @@ def main() -> None:
     )
 
     if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=1)
+        expert_transitions = expert_mountaincar(train_env, count=20)
         for state, action, reward, next_state, done in expert_transitions:
-            # print(state, action, reward, next_state, done)
             agent.replay_buffer.push(state, action, reward, next_state, done)
 
     trained_agent, history = train(
@@ -175,7 +174,7 @@ def main() -> None:
         train_env=train_env,
         test_env=test_env,
         steps=args.steps,
-        warmup=2000,
+        warmup=0,
         train_freq=32,
         gradient_steps=32,
         test_freq=1000,
