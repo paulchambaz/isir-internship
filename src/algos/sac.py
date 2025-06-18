@@ -12,7 +12,6 @@ import numpy as np
 import torch
 import torch.distributions as dist
 from torch import nn
-from torch.nn.functional import softplus
 
 from .replay import ReplayBuffer
 
@@ -58,13 +57,12 @@ class PolicyNetwork(nn.Module):
 
     def forward(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         output = self.model(state)
-        mean, raw_scale = torch.split(output, self.action_dim, dim=-1)
+        mean, log_std = torch.split(output, self.action_dim, dim=-1)
 
         # log_std = torch.clamp(torch.log(softplus(raw_scale) + 1e-5), -20, 2)
-        scale = softplus(raw_scale) + 1e-5
+        log_std = torch.clamp(log_std, -20, 2)
 
-        # return mean, log_std
-        return mean, scale
+        return mean, log_std
 
 
 class SAC:
@@ -297,7 +295,7 @@ class SAC:
         # r + gamma (1 - d) (min Q(s', a') - log pi (a' | s'))
         alpha = self.log_alpha.exp()
         targets = rewards + self.gamma * (1.0 - dones.float()) * (
-            q_targets - alpha * log_probs
+            q_targets - alpha * log_probs.detach()
         )
 
         # EE [ 1/2 * (Q_theta_i (s, a) - y) ]
@@ -312,8 +310,7 @@ class SAC:
         # min(Q_theta_1 (s, a), Q_theta_2 (s, a))
         q1_values = self.q_network1(states, actions)
         q2_values = self.q_network2(states, actions)
-        # q_values = torch.min(q1_values, q2_values)
-        q_values = (q1_values + q2_values) / 2.0
+        q_values = torch.min(q1_values, q2_values)
 
         # EE [ alpha log pi (a | s) - Q (s, a) ]
         alpha = self.log_alpha.exp()
@@ -331,10 +328,8 @@ class SAC:
         self, state: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         #  N(mu_theta (s), sigma_theta (s)^2)
-        # mean, log_std = self.policy_network(state)
-        # gaussian = dist.Normal(mean, log_std.exp())
-        mean, scale = self.policy_network(state)
-        gaussian = dist.Normal(mean, scale)
+        mean, log_std = self.policy_network(state)
+        gaussian = dist.Normal(mean, log_std.exp())
 
         # a = tanh(u), u ~ N
         raw_action = gaussian.rsample()
@@ -342,7 +337,7 @@ class SAC:
 
         # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
         log_prob_gaussian = gaussian.log_prob(raw_action)
-        tanh_correction = torch.log(1 - action.pow(2) + 1e-6)
+        tanh_correction = torch.log(1 - action**2 + 1e-6)
         log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
 
         return action, log_prob
