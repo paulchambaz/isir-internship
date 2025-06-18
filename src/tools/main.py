@@ -12,6 +12,7 @@ from pathlib import Path
 
 import gymnasium as gym
 from tqdm import tqdm
+import numpy as np
 
 import algos
 
@@ -31,7 +32,9 @@ def expert_mountaincar(env: gym.Env, count: int) -> None:
         steps = 0
 
         while True:
-            action = [-1] if steps < 12 + turning_point else [1]
+            action = np.array(
+                [-1] if steps < 12 + turning_point else [1], dtype=np.float32
+            )
 
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
@@ -61,8 +64,6 @@ def train(
     training_steps = 0
     history = {}
 
-    goal_reached_count = 0
-
     progress = tqdm(range(steps))
 
     while training_steps < steps:
@@ -75,9 +76,6 @@ def train(
                 action
             )
             done = terminated or truncated
-
-            if reward > 50:
-                goal_reached_count += 1
 
             agent.replay_buffer.push(state, action, reward, next_state, done)
 
@@ -92,9 +90,7 @@ def train(
             if training_steps % test_freq == 0:
                 results = test(agent, test_env, 10)
                 history[training_steps // test_freq] = results
-                progress.set_postfix(
-                    {"eval": get_stats(results), "goals": goal_reached_count}
-                )
+                progress.set_postfix({"eval": get_stats(results)})
 
             if done or training_steps >= steps:
                 break
@@ -154,8 +150,6 @@ def main() -> None:
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
 
-    expert_transitions = expert_mountaincar(train_env, count=10)
-
     agent = algos.SAC(
         action_dim=train_env.action_space.shape[0],
         state_dim=train_env.observation_space.shape[0],
@@ -170,8 +164,11 @@ def main() -> None:
         alpha=0.1,
     )
 
-    for state, action, reward, next_state, done in expert_transitions:
-        agent.replay_buffer.push(state, action, reward, next_state, done)
+    if args.env == "mountaincar":
+        expert_transitions = expert_mountaincar(train_env, count=1)
+        for state, action, reward, next_state, done in expert_transitions:
+            # print(state, action, reward, next_state, done)
+            agent.replay_buffer.push(state, action, reward, next_state, done)
 
     trained_agent, history = train(
         agent=agent,
