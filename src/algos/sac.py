@@ -188,7 +188,9 @@ class SAC:
         mean, log_std = self.policy_network(state)
 
         action = (
-            mean if evaluation else dist.Normal(mean, log_std.exp()).rsample()
+            mean
+            if evaluation
+            else dist.Normal(mean, log_std.exp() + 1e-8).rsample()
         )
 
         return torch.tanh(action).squeeze(0).detach().numpy()
