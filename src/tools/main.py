@@ -82,9 +82,9 @@ def train(
                 best_iqm = iqm
                 best_agent_state = agent.get_state()
 
-    best_agent = agent.load_from_state(best_agent_state)
+    agent.load_from_state(best_agent_state)
 
-    return best_agent, history
+    return agent, history
 
 
 def get_stats(data: list) -> str:
