@@ -23,6 +23,31 @@ def get_stats(data: list) -> str:
     return f"[{min_val:.1f}|{q1:.1f}|{iqm:.1f}|{q3:.1f}|{max_val:.1f}]"
 
 
+def expert_mountaincar(env: gym.Env, count: int) -> None:
+    transitions = []
+
+    for turning_point in range(count):
+        state, _ = env.reset()
+        steps = 0
+
+        while True:
+            action = [-1] if steps < 12 + turning_point else [1]
+
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
+            transitions.append((state, action, reward, next_state, done))
+
+            state = next_state
+
+            if done:
+                break
+
+            steps += 1
+
+    return transitions
+
+
 def train(
     agent: algos.SAC,
     train_env: gym.Env,
@@ -129,6 +154,8 @@ def main() -> None:
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
 
+    expert_transitions = expert_mountaincar(train_env, count=10)
+
     agent = algos.SAC(
         action_dim=train_env.action_space.shape[0],
         state_dim=train_env.observation_space.shape[0],
@@ -142,6 +169,9 @@ def main() -> None:
         gamma=0.9999,
         alpha=0.1,
     )
+
+    for state, action, reward, next_state, done in expert_transitions:
+        agent.replay_buffer.push(state, action, reward, next_state, done)
 
     trained_agent, history = train(
         agent=agent,
