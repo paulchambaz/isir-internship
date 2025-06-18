@@ -19,6 +19,74 @@ import algos
 from .utils import compute_stats
 
 
+def train(
+    agent: algos.SAC,
+    train_env: gym.Env,
+    test_env: gym.Env,
+    steps: int,
+    warmup: int,
+    train_freq: int,
+    gradient_steps: int,
+    test_freq: int,
+    count: int,
+) -> algos.SAC:
+    history = {}
+
+    state = agent.get_state()
+    best_state = state
+    best_iqm = -float("inf")
+
+    for i in range(count):
+        training_steps = 0
+
+        agent.load_from_state(state)
+
+        progress = tqdm(range(steps), desc=f"Run {i + 1}/{count}")
+
+        while training_steps < steps:
+            state, _ = train_env.reset()
+
+            while True:
+                action = agent.select_action(state, evaluation=False)
+
+                next_state, reward, terminated, truncated, _ = train_env.step(
+                    action
+                )
+                done = terminated or truncated
+
+                agent.replay_buffer.push(
+                    state, action, reward, next_state, done
+                )
+
+                if training_steps > warmup and training_steps % train_freq == 0:
+                    for _ in range(gradient_steps):
+                        agent.update()
+
+                state = next_state
+                training_steps += 1
+                progress.update(1)
+
+                if training_steps % test_freq == 0:
+                    results = test(agent, test_env, 10)
+                    result_id = training_steps // test_freq
+                    history.setdefault(result_id, []).extend(results)
+                    progress.set_postfix({"eval": get_stats(results)})
+
+                if done or training_steps >= steps:
+                    break
+
+            final_evaluation = test(agent, test_env, 100)
+            _, q1, iqm, _, _ = compute_stats(final_evaluation)
+
+            if q1 > best_iqm:
+                best_iqm = iqm
+                best_state = agent.get_state()
+
+    best_agent = agent.load_from_state(best_state)
+
+    return best_agent, history
+
+
 def get_stats(data: list) -> str:
     min_val, q1, iqm, q3, max_val = compute_stats(data)
     return f"[{min_val:.1f}|{q1:.1f}|{iqm:.1f}|{q3:.1f}|{max_val:.1f}]"
@@ -49,53 +117,6 @@ def expert_mountaincar(env: gym.Env, count: int) -> None:
             steps += 1
 
     return transitions
-
-
-def train(
-    agent: algos.SAC,
-    train_env: gym.Env,
-    test_env: gym.Env,
-    steps: int,
-    warmup: int,
-    train_freq: int,
-    gradient_steps: int,
-    test_freq: int,
-) -> algos.SAC:
-    training_steps = 0
-    history = {}
-
-    progress = tqdm(range(steps))
-
-    while training_steps < steps:
-        state, _ = train_env.reset()
-
-        while True:
-            action = agent.select_action(state, evaluation=False)
-
-            next_state, reward, terminated, truncated, _ = train_env.step(
-                action
-            )
-            done = terminated or truncated
-
-            agent.replay_buffer.push(state, action, reward, next_state, done)
-
-            if training_steps > warmup and training_steps % train_freq == 0:
-                for _ in range(gradient_steps):
-                    agent.update()
-
-            state = next_state
-            training_steps += 1
-            progress.update(1)
-
-            if training_steps % test_freq == 0:
-                results = test(agent, test_env, 10)
-                history[training_steps // test_freq] = results
-                progress.set_postfix({"eval": get_stats(results)})
-
-            if done or training_steps >= steps:
-                break
-
-    return agent, history
 
 
 def test(agent: algos.SAC, env: gym.Env, n: int) -> list:
@@ -178,6 +199,7 @@ def main() -> None:
         train_freq=32,
         gradient_steps=32,
         test_freq=1000,
+        count=15,
     )
 
     Path("outputs").mkdir(exist_ok=True)
