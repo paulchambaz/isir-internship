@@ -60,9 +60,11 @@ class PolicyNetwork(nn.Module):
         output = self.model(state)
         mean, raw_scale = torch.split(output, self.action_dim, dim=-1)
 
-        log_std = torch.clamp(torch.log(softplus(raw_scale) + 1e-5), -20, 2)
+        # log_std = torch.clamp(torch.log(softplus(raw_scale) + 1e-5), -20, 2)
+        scale = softplus(raw_scale) + 1e-5
 
-        return mean, log_std
+        # return mean, log_std
+        return mean, scale
 
 
 class SAC:
@@ -236,7 +238,7 @@ class SAC:
         """
         Returns dictionary containing all agent state for saving or transferring.
         """
-        return {
+        state = {
             "q1": self.q_network1.state_dict(),
             "q2": self.q_network2.state_dict(),
             "q1_target": self.q_target_network1.state_dict(),
@@ -246,9 +248,13 @@ class SAC:
             "q_optimizer1": self.q_optimizer1.state_dict(),
             "q_optimizer2": self.q_optimizer2.state_dict(),
             "policy_optimizer": self.policy_optimizer.state_dict(),
-            "alpha_optimizer": self.alpha_optimizer.state_dict(),
             "replay_buffer": self.replay_buffer.get_data(),
         }
+
+        if self.learn_alpha:
+            state["alpha_optimizer"] = self.alpha_optimizer.state_dict()
+
+        return state
 
     def load_from_state(self, state: dict) -> None:
         """
@@ -266,8 +272,10 @@ class SAC:
         self.q_optimizer1.load_state_dict(state["q_optimizer1"])
         self.q_optimizer2.load_state_dict(state["q_optimizer2"])
         self.policy_optimizer.load_state_dict(state["policy_optimizer"])
-        self.alpha_optimizer.load_state_dict(state["alpha_optimizer"])
         self.replay_buffer.load_data(state["replay_buffer"])
+
+        if self.learn_alpha:
+            self.alpha_optimizer.load_state_dict(state["alpha_optimizer"])
 
     def _compute_q_loss(
         self,
@@ -304,7 +312,8 @@ class SAC:
         # min(Q_theta_1 (s, a), Q_theta_2 (s, a))
         q1_values = self.q_network1(states, actions)
         q2_values = self.q_network2(states, actions)
-        q_values = torch.min(q1_values, q2_values)
+        # q_values = torch.min(q1_values, q2_values)
+        q_values = torch.mean(q1_values, q2_values)
 
         # EE [ alpha log pi (a | s) - Q (s, a) ]
         alpha = self.log_alpha.exp()
@@ -316,14 +325,16 @@ class SAC:
 
         # EE [ alpha (log pi (a | s) - H) ]
         alpha = self.log_alpha.exp()
-        return torch.mean(-alpha * (log_probs + self.target_entropy))
+        return torch.mean(-alpha * (log_probs.detach() + self.target_entropy))
 
     def _compute_action_and_log_prob(
         self, state: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         #  N(mu_theta (s), sigma_theta (s)^2)
-        mean, log_std = self.policy_network(state)
-        gaussian = dist.Normal(mean, log_std.exp())
+        # mean, log_std = self.policy_network(state)
+        # gaussian = dist.Normal(mean, log_std.exp())
+        mean, scale = self.policy_network(state)
+        gaussian = dist.Normal(mean, scale)
 
         # a = tanh(u), u ~ N
         raw_action = gaussian.rsample()
