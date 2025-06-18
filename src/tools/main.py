@@ -32,14 +32,14 @@ def train(
 ) -> algos.SAC:
     history = {}
 
-    state = agent.get_state()
-    best_state = state
+    agent_state = agent.get_state()
+    best_agent_state = agent_state
     best_iqm = -float("inf")
 
     for i in range(count):
         training_steps = 0
 
-        agent.load_from_state(state)
+        agent.load_from_state(agent_state)
 
         progress = tqdm(range(steps), desc=f"Run {i + 1}/{count}")
 
@@ -80,9 +80,9 @@ def train(
 
             if q1 > best_iqm:
                 best_iqm = iqm
-                best_state = agent.get_state()
+                best_agent_state = agent.get_state()
 
-    best_agent = agent.load_from_state(best_state)
+    best_agent = agent.load_from_state(best_agent_state)
 
     return best_agent, history
 
