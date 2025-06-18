@@ -338,7 +338,7 @@ class SAC:
         eps = torch.finfo(action.dtype).eps
         clamped_action = torch.clamp(action, min=-1.0 + eps, max=1.0 - eps)
         tanh_correction = torch.log1p(-(clamped_action**2))
-        log_prob = (log_prob_gaussian + tanh_correction).sum(dim=-1)
+        log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
 
         return action, log_prob
 
