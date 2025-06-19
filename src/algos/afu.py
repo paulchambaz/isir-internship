@@ -434,7 +434,7 @@ class AFU:
             ) * v_values_nograd
 
             # x_i
-            x_values = upsilon_values - targets
+            x_values = upsilon_values - targets.detach()
 
             # E [ z_i ]
             return torch.mean(
