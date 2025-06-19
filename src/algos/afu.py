@@ -380,7 +380,7 @@ class AFU:
 
         # EE [ 1/2 * (Q_psi (s, a) - y)^2 ]
         q_values = self.q_network(states, actions)
-        return torch.mean(0.5 * (q_values - targets.detach()) ** 2)
+        return torch.mean((q_values - targets.detach()) ** 2)
 
     def _compute_va_loss(
         self,
