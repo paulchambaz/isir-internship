@@ -426,7 +426,9 @@ class AFU:
             a_values = a_network(states, actions)
 
             # upsilon_i
-            indicator = (v_values + a_values < targets).float()
+            # FIX: BACK
+            # indicator = (v_values + a_values < targets).float()
+            indicator = (targets <= v_values + a_values).float()
             upsilon_values = (1 - indicator * self.rho) * v_values + (
                 indicator * self.rho
             ) * v_values_nograd
