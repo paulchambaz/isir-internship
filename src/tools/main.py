@@ -196,15 +196,15 @@ def main() -> None:
     agent = algos.AFU(
         action_dim=train_env.action_space.shape[0],
         state_dim=train_env.observation_space.shape[0],
-        hidden_dims=[64, 64],
+        hidden_dims=[256, 256],
         replay_size=200_000,
         batch_size=256,
         critic_lr=3e-4,
         policy_lr=3e-4,
         temperature_lr=3e-4,
-        tau=0.005,
-        rho=0.3,
-        gamma=0.999,
+        tau=0.01,
+        rho=0.4,
+        gamma=0.99,
         alpha=None,
     )
 
