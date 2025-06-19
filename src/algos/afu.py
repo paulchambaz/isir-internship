@@ -376,7 +376,9 @@ class AFU:
         v_targets = torch.min(v1_targets, v2_targets)
 
         # r + gamma (1 - d) (min V(s'))
-        targets = rewards + self.gamma * (1 - dones.float()) * v_targets
+        targets = (
+            rewards + self.gamma * (1 - dones.float()) * v_targets.detach()
+        )
 
         # EE [ 1/2 * (Q_psi (s, a) - y)^2 ]
         q_values = self.q_network(states, actions)
@@ -396,7 +398,9 @@ class AFU:
         v_targets = torch.min(v1_targets, v2_targets)
 
         # r + gamma (1 - d) (min V(s'))
-        targets = rewards + self.gamma * (1 - dones.float()) * v_targets
+        targets = (
+            rewards + self.gamma * (1 - dones.float()) * v_targets.detach()
+        )
 
         # Q (s, a)
         q_values = self.q_network(states, actions)
@@ -414,7 +418,7 @@ class AFU:
             a_values = a_network(states, actions)
 
             # rho * I_i
-            rho = self.rho * (v_values + a_values < q_values).float()
+            rho = self.rho * (v_values + a_values < q_values.detach()).float()
 
             # upsilon_i
             upsilon_values = (1 - rho) * v_values + rho * v_values_nograd
