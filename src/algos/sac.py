@@ -69,9 +69,8 @@ class SAC:
     Soft Actor-Critic (SAC) algorithm for continuous control tasks.
 
     SAC is an off-policy actor-critic method based on the maximum entropy
-    reinforcement learning framework. It learns a stochastic policy that
-    maximizes both expected return and entropy to improve exploration and
-    robustness.
+    reinforcement learning framework. It learns a stochastic policy that maximizes
+    both expected return and entropy to improve exploration and robustness.
 
     Args:
         action_dim: Dimensionality of the action space
@@ -81,16 +80,15 @@ class SAC:
         batch_size: Number of samples per training batch
         critic_lr: Learning rate for Q-function networks
         policy_lr: Learning rate for policy network
-        alpha_lr: Learning rate for temperature parameter
+        temperature_lr: Learning rate for temperature parameter
         tau: Target network soft update coefficient (0 < tau <= 1)
         gamma: Discount factor for future rewards (0 < gamma <= 1)
-        alpha: If None, learn alpha. If float, use fixed alpha value.
-        weights: Optional pre-trained network weights dictionary
+        alpha: If None, learn alpha, if float, use fixed alpha value
+        state: Optional pre-trained network state dictionary
     """
 
     __slots__ = [
         "action_dim",
-        "alpha_optimizer",
         "batch_size",
         "gamma",
         "learn_temperature",
@@ -107,6 +105,7 @@ class SAC:
         "state_dim",
         "target_entropy",
         "tau",
+        "temperature_optimizer",
     ]
 
     def __init__(
@@ -118,7 +117,7 @@ class SAC:
         batch_size: int,
         critic_lr: float,
         policy_lr: float,
-        alpha_lr: float,
+        temperature_lr: float,
         tau: float,
         gamma: float,
         alpha: float | None,
@@ -155,7 +154,7 @@ class SAC:
         )
 
         self.temperature_optimizer = (
-            torch.optim.Adam([self.log_alpha], lr=alpha_lr)
+            torch.optim.Adam([self.log_alpha], lr=temperature_lr)
             if self.learn_temperature
             else None
         )
@@ -297,12 +296,14 @@ class SAC:
             q_targets - alpha * log_probs.detach()
         )
 
-        # EE [ 1/2 * (Q_theta_i (s, a) - y)^2 ]
-        q1_values = self.q_network1(states, actions)
-        q2_values = self.q_network2(states, actions)
+        def _compute_q_loss_i(q_network: nn.Module) -> torch.Tensor:
+            # EE [ 1/2 * (Q_theta_i (s, a) - y)^2 ]
+            q_values = q_network(states, actions)
+            return torch.mean(0.5 * (q_values - targets.detach()) ** 2)
+
         return (
-            torch.mean(0.5 * (q1_values - targets.detach()) ** 2),
-            torch.mean(0.5 * (q2_values - targets.detach()) ** 2),
+            _compute_q_loss_i(self.q_network1),
+            _compute_q_loss_i(self.q_network2),
         )
 
     def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:

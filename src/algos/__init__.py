@@ -11,7 +11,8 @@
 __version__ = "0.1.0"
 __author__ = "Paul Chambaz"
 
+from .afu import AFU
 from .sac import SAC
 from .simple_right import SimpleRight
 
-__all__ = ["SAC", "SimpleRight"]
+__all__ = ["AFU", "SAC", "SimpleRight"]

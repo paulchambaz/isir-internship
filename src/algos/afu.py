@@ -102,13 +102,38 @@ class PolicyNetwork(nn.Module):
 
 
 class AFU:
+    """
+    Actor-Free critic Updates (AFU) algorithm for continuous control tasks.
+
+    AFU uses a V function for state evaluation in the Bellman TD equation with
+    Q=V+A decomposition, where A represents regret of not taking the best
+    action. It employs conditional gradient rescaling to ensure V is a tight
+    bound of max Q and conditional optimization to enforce negative A values,
+    while maintaining a stochastic policy that maximizes both expected return
+    and entropy.
+
+    Args:
+        action_dim: Dimensionality of the action space
+        state_dim: Dimensionality of the state space
+        hidden_dims: List of hidden layer sizes for neural networks
+        replay_size: Maximum size of the replay buffer
+        batch_size: Number of samples per training batch
+        critic_lr: Learning rate for Q, V, and A function networks
+        policy_lr: Learning rate for policy network
+        temperature_lr: Learning rate for temperature parameter
+        tau: Target network soft update coefficient (0 < tau <= 1)
+        rho: Conditional gradient rescaling coefficient for V-A constraints
+        gamma: Discount factor for future rewards (0 < gamma <= 1)
+        alpha: If None, learn alpha, if float, use fixed alpha value
+        state: Optional pre-trained network state dictionary
+    """
+
     __slots__ = [
         "a_network1",
         "a_network2",
         "a_optimizer1",
         "a_optimizer2",
         "action_dim",
-        "alpha_optimizer",
         "batch_size",
         "gamma",
         "learn_temperature",
@@ -122,6 +147,7 @@ class AFU:
         "state_dim",
         "target_entropy",
         "tau",
+        "temperature_optimizer",
         "v_network1",
         "v_network2",
         "v_optimizer1",
@@ -139,7 +165,7 @@ class AFU:
         batch_size: int,
         critic_lr: float,
         policy_lr: float,
-        alpha_lr: float,
+        temperature_lr: float,
         tau: float,
         rho: float,
         gamma: float,
@@ -193,8 +219,8 @@ class AFU:
             self.policy_network.parameters(), lr=policy_lr
         )
 
-        self.alpha_optimizer = (
-            torch.optim.Adam([self.log_alpha], lr=alpha_lr)
+        self.temperature_optimizer = (
+            torch.optim.Adam([self.log_alpha], lr=temperature_lr)
             if self.learn_temperature
             else None
         )
@@ -251,22 +277,18 @@ class AFU:
         va1_loss, va2_loss = self._compute_va_loss(
             states, actions, rewards, next_states, dones
         )
-        self.v_optimizer1.zero_grad()
-        va1_loss.backward()
-        self.v_optimizer1.step()
-        self.v_optimizer2.zero_grad()
-        va2_loss.backward()
-        self.v_optimizer2.step()
 
-        va1_loss, va2_loss = self._compute_va_loss(
-            states, actions, rewards, next_states, dones
-        )
+        self.v_optimizer1.zero_grad()
         self.a_optimizer1.zero_grad()
-        va1_loss.backward()
+        va1_loss.backward(retain_graph=True)
         self.a_optimizer1.step()
+        self.v_optimizer1.step()
+
+        self.v_optimizer2.zero_grad()
         self.a_optimizer2.zero_grad()
         va2_loss.backward()
         self.a_optimizer2.step()
+        self.v_optimizer2.step()
 
         self._soft_update_targets()
 
@@ -285,7 +307,31 @@ class AFU:
         """
         Returns dictionary containing all agent state for saving or transferring.
         """
-        # TODO: export everything needed
+        state = {
+            "q": self.q_network.state_dict(),
+            "v1": self.v_network1.state_dict(),
+            "v2": self.v_network2.state_dict(),
+            "v1_target": self.v_target_network1.state_dict(),
+            "v2_target": self.v_target_network2.state_dict(),
+            "a1": self.a_network1.state_dict(),
+            "a2": self.a_network2.state_dict(),
+            "policy": self.policy_network.state_dict(),
+            "log_alpha": self.log_alpha.item(),
+            "q_optimizer": self.q_optimizer.state_dict(),
+            "v_optimizer1": self.v_optimizer1.state_dict(),
+            "v_optimizer2": self.v_optimizer2.state_dict(),
+            "a_optimizer1": self.a_optimizer1.state_dict(),
+            "a_optimizer2": self.a_optimizer2.state_dict(),
+            "policy_optimizer": self.policy_optimizer.state_dict(),
+            "replay_buffer": self.replay_buffer.get_data(),
+        }
+
+        if self.learn_temperature:
+            state["temperature_optimizer"] = (
+                self.temperature_optimizer.state_dict()
+            )
+
+        return state
 
     def load_from_state(self, state: dict) -> None:
         """
@@ -294,7 +340,27 @@ class AFU:
         Args:
             state: Dictionary of agent state from get_state
         """
-        # TODO: import everything needed
+        self.q_network.load_state_dict(state["q"])
+        self.v_network1.load_state_dict(state["v1"])
+        self.v_network2.load_state_dict(state["v2"])
+        self.v_target_network1.load_state_dict(state["v1_target"])
+        self.v_target_network2.load_state_dict(state["v2_target"])
+        self.a_network1.load_state_dict(state["a1"])
+        self.a_network2.load_state_dict(state["a2"])
+        self.policy_network.load_state_dict(state["policy"])
+        self.log_alpha.data = torch.tensor(state["log_alpha"])
+        self.q_optimizer.load_state_dict(state["q_optimizer"])
+        self.v_optimizer1.load_state_dict(state["v_optimizer1"])
+        self.v_optimizer2.load_state_dict(state["v_optimizer2"])
+        self.a_optimizer1.load_state_dict(state["a_optimizer1"])
+        self.a_optimizer2.load_state_dict(state["a_optimizer2"])
+        self.policy_optimizer.load_state_dict(state["policy_optimizer"])
+        self.replay_buffer.load_data(state["replay_buffer"])
+
+        if self.learn_temperature:
+            self.temperature_optimizer.load_state_dict(
+                state["temperature_optimizer"]
+            )
 
     def _compute_q_loss(
         self,
@@ -335,38 +401,39 @@ class AFU:
         # Q (s, a)
         q_values = self.q_network(states, actions)
 
-        # V_phi_1 (s), V_phi_2 (s)
-        v1_values = self.v_network1(states)
-        v2_values = self.v_network2(states)
+        def _compute_va_loss_i(
+            v_network: nn.Module, a_network: nn.Module
+        ) -> torch.Tensor:
+            # V_phi_i (s)
+            v_values = v_network(states)
 
-        # V^nograd_phi_1 (s), V^nograd_phi_2 (s)
-        v1_values_nograd = v1_values.detach()
-        v2_values_nograd = v2_values.detach()
+            # V^nograd_phi_i (s)
+            v_values_nograd = v_values.detach()
 
-        # A_xi_1 (s, a), A_xi_2 (s, a)
-        a1_values = self.a_network1(states, actions)
-        a2_values = self.a_network2(states, actions)
+            # A_xi_i (s, a)
+            a_values = a_network(states, actions)
 
-        # rho * I_1, rho * I_2
-        rho1 = self.rho * (v1_values + a1_values < q_values).float()
-        rho2 = self.rho * (v2_values + a2_values < q_values).float()
+            # rho * I_i
+            rho = self.rho * (v_values + a_values < q_values).float()
 
-        # upsilon_1, upsilon_2
-        upsilon1_values = (1 - rho1) * v1_values + rho1 * v1_values_nograd
-        upsilon2_values = (1 - rho2) * v2_values + rho2 * v2_values_nograd
+            # upsilon_i
+            upsilon_values = (1 - rho) * v_values + rho * v_values_nograd
 
-        x1 = upsilon1_values - targets
-        x2 = upsilon2_values - targets
+            # x_i
+            x_values = upsilon_values - targets
 
-        y1 = a1_values
-        y2 = a2_values
-
-        i1 = (x1 >= 0).float()
-        i2 = (x2 >= 0).float()
+            # E [ z_i ]
+            return torch.mean(
+                torch.where(
+                    x_values >= 0,
+                    x_values**2 + a_values**2,
+                    (x_values + a_values) ** 2,
+                )
+            )
 
         return (
-            torch.mean((x1 + y1) ** 2 * (1 - i1) + (x1**2 + y1**2) * i1),
-            torch.mean((x2 + y2) ** 2 * (1 - i2) + (x2**2 + y2**2) * i2),
+            _compute_va_loss_i(self.v_network1, self.a_network1),
+            _compute_va_loss_i(self.v_network2, self.a_network2),
         )
 
     def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:

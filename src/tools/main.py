@@ -20,7 +20,8 @@ from .utils import compute_stats
 
 
 def train(
-    agent: algos.SAC,
+    # agent: algos.SAC,
+    agent: algos.AFU,
     train_env: gym.Env,
     test_env: gym.Env,
     steps: int,
@@ -29,7 +30,7 @@ def train(
     gradient_steps: int,
     test_freq: int,
     count: int,
-) -> tuple(algos.SAC, dict):
+) -> tuple[algos.AFU, dict]:
     history = {}
 
     agent_state = agent.get_state()
@@ -119,7 +120,7 @@ def expert_mountaincar(env: gym.Env, count: int) -> None:
     return transitions
 
 
-def test(agent: algos.SAC, env: gym.Env, n: int) -> list:
+def test(agent: algos.AFU, env: gym.Env, n: int) -> list:
     results = []
 
     for _ in range(n):
@@ -171,7 +172,21 @@ def main() -> None:
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
 
-    agent = algos.SAC(
+    # agent = algos.SAC(
+    #     action_dim=train_env.action_space.shape[0],
+    #     state_dim=train_env.observation_space.shape[0],
+    #     hidden_dims=[64, 64],
+    #     replay_size=200_000,
+    #     batch_size=256,
+    #     critic_lr=3e-4,
+    #     policy_lr=3e-4,
+    #     temperature_lr=3e-4,
+    #     tau=0.005,
+    #     gamma=0.999,
+    #     alpha=None,
+    # )
+
+    agent = algos.AFU(
         action_dim=train_env.action_space.shape[0],
         state_dim=train_env.observation_space.shape[0],
         hidden_dims=[64, 64],
@@ -179,8 +194,9 @@ def main() -> None:
         batch_size=256,
         critic_lr=3e-4,
         policy_lr=3e-4,
-        alpha_lr=3e-4,
+        temperature_lr=3e-4,
         tau=0.005,
+        rho=0.3,
         gamma=0.999,
         alpha=None,
     )
