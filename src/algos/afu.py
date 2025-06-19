@@ -270,23 +270,36 @@ class AFU:
         q_loss = self._compute_q_loss(
             states, actions, rewards, next_states, dones
         )
-        self.q_optimizer.zero_grad()
-        q_loss.backward()
-        self.q_optimizer.step()
-
         va1_loss, va2_loss = self._compute_va_loss(
             states, actions, rewards, next_states, dones
         )
 
+        self.q_optimizer.zero_grad()
         self.v_optimizer1.zero_grad()
         self.a_optimizer1.zero_grad()
-        va1_loss.backward(retain_graph=True)
-        self.a_optimizer1.step()
-        self.v_optimizer1.step()
-
         self.v_optimizer2.zero_grad()
         self.a_optimizer2.zero_grad()
+
+        q_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            self.q_network.parameters(), max_norm=1.0
+        )
+        va1_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(self.v_network1.parameters())
+            + list(self.a_network1.parameters()),
+            max_norm=1.0,
+        )
         va2_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(self.v_network2.parameters())
+            + list(self.a_network2.parameters()),
+            max_norm=1.0,
+        )
+
+        self.q_optimizer.step()
+        self.a_optimizer1.step()
+        self.v_optimizer1.step()
         self.a_optimizer2.step()
         self.v_optimizer2.step()
 
@@ -412,11 +425,11 @@ class AFU:
             # A_xi_i (s, a)
             a_values = a_network(states, actions)
 
-            # rho * I_i
-            rho = self.rho * (v_values + a_values < targets.detach()).float()
-
             # upsilon_i
-            upsilon_values = (1 - rho) * v_values + rho * v_values_nograd
+            indicator = (v_values + a_values < targets).float()
+            upsilon_values = (1 - indicator * self.rho) * v_values + (
+                indicator * self.rho
+            ) * v_values_nograd
 
             # x_i
             x_values = upsilon_values - targets
