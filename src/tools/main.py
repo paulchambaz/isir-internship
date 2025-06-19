@@ -208,10 +208,10 @@ def main() -> None:
         alpha=None,
     )
 
-    if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=10)
-        for state, action, reward, next_state, done in expert_transitions:
-            agent.replay_buffer.push(state, action, reward, next_state, done)
+    # if args.env == "mountaincar":
+    #     expert_transitions = expert_mountaincar(train_env, count=10)
+    #     for state, action, reward, next_state, done in expert_transitions:
+    #         agent.replay_buffer.push(state, action, reward, next_state, done)
 
     trained_agent, history = train(
         agent=agent,

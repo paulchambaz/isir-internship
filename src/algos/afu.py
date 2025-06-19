@@ -402,23 +402,18 @@ class AFU:
             rewards + self.gamma * (1 - dones.float()) * v_targets.detach()
         )
 
-        # Q (s, a)
-        q_values = self.q_network(states, actions)
-
         def _compute_va_loss_i(
             v_network: nn.Module, a_network: nn.Module
         ) -> torch.Tensor:
-            # V_phi_i (s)
+            # V_phi_i (s), V^nograd_phi_i (s)
             v_values = v_network(states)
-
-            # V^nograd_phi_i (s)
             v_values_nograd = v_values.detach()
 
             # A_xi_i (s, a)
             a_values = a_network(states, actions)
 
             # rho * I_i
-            rho = self.rho * (v_values + a_values < q_values.detach()).float()
+            rho = self.rho * (v_values + a_values < targets.detach()).float()
 
             # upsilon_i
             upsilon_values = (1 - rho) * v_values + rho * v_values_nograd
