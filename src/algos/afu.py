@@ -424,11 +424,12 @@ class AFU:
 
             # A_xi_i (s, a)
             a_values = a_network(states, actions)
+            optim_advantages = -a_values
 
             # upsilon_i
             # FIX: BACK
             # indicator = (v_values + a_values < targets).float()
-            indicator = (targets <= v_values + a_values).float()
+            indicator = (targets <= v_values + optim_advantages).float()
             upsilon_values = (1 - indicator * self.rho) * v_values + (
                 indicator * self.rho
             ) * v_values_nograd
@@ -440,8 +441,8 @@ class AFU:
             return torch.mean(
                 torch.where(
                     x_values >= 0,
-                    (x_values + a_values) ** 2,
-                    x_values**2 + a_values**2,
+                    (x_values + optim_advantages) ** 2,
+                    x_values**2 + optim_advantages**2,
                 )
             )
 
