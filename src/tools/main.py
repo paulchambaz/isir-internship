@@ -163,8 +163,15 @@ def main() -> None:
         "--steps",
         type=int,
         required=False,
-        default=200_000,
+        default=100_000,
         help="Max number of steps for the experiment",
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        required=False,
+        default=1,
+        help="Number of runs for the experiment",
     )
     args = parser.parse_args()
 
@@ -215,7 +222,7 @@ def main() -> None:
         train_freq=32,
         gradient_steps=32,
         test_freq=1000,
-        count=15,
+        count=args.runs,
     )
 
     Path("outputs").mkdir(exist_ok=True)

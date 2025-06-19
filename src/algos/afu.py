@@ -426,8 +426,8 @@ class AFU:
             return torch.mean(
                 torch.where(
                     x_values >= 0,
-                    x_values**2 + a_values**2,
                     (x_values + a_values) ** 2,
+                    x_values**2 + a_values**2,
                 )
             )
 
