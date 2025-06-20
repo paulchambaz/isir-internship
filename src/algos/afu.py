@@ -276,30 +276,30 @@ class AFU:
 
         self.q_optimizer.zero_grad()
         q_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(
-        #     self.q_network.parameters(), max_norm=1.0
-        # )
+        torch.nn.utils.clip_grad_norm_(
+            self.q_network.parameters(), max_norm=1.0
+        )
         self.q_optimizer.step()
 
         self.v_optimizer1.zero_grad()
         self.a_optimizer1.zero_grad()
         va1_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(
-        #     list(self.v_network1.parameters())
-        #     + list(self.a_network1.parameters()),
-        #     max_norm=1.0,
-        # )
+        torch.nn.utils.clip_grad_norm_(
+            list(self.v_network1.parameters())
+            + list(self.a_network1.parameters()),
+            max_norm=1.0,
+        )
         self.a_optimizer1.step()
         self.v_optimizer1.step()
 
         self.v_optimizer2.zero_grad()
         self.a_optimizer2.zero_grad()
         va2_loss.backward()
-        # torch.nn.utils.clip_grad_norm_(
-        #     list(self.v_network2.parameters())
-        #     + list(self.a_network2.parameters()),
-        #     max_norm=1.0,
-        # )
+        torch.nn.utils.clip_grad_norm_(
+            list(self.v_network2.parameters())
+            + list(self.a_network2.parameters()),
+            max_norm=1.0,
+        )
 
         self.a_optimizer2.step()
         self.v_optimizer2.step()
@@ -425,7 +425,7 @@ class AFU:
             v_values_nograd = v_values.detach()
 
             # A_xi_i (s, a)
-            a_values = -a_network(states, actions)
+            a_values = a_network(states, actions)
 
             # upsilon_i
             indicator = (v_values + a_values < targets).float()
@@ -439,7 +439,7 @@ class AFU:
             # E [ z_i ]
             return torch.mean(
                 torch.where(
-                    v_values >= targets,
+                    v_values - targets >= 0,
                     (x_values + a_values) ** 2,
                     x_values**2 + a_values**2,
                 )
