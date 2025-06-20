@@ -259,6 +259,16 @@ class AFU:
 
         return torch.tanh(action).squeeze(0).detach().numpy()
 
+    def push_buffer(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        reward: float,
+        next_state: np.ndarray,
+        done: bool,  # noqa: FBT001
+    ) -> None:
+        self.replay_buffer.push(state, action, reward, next_state, done)
+
     def update(self) -> None:
         if len(self.replay_buffer) < self.batch_size:
             return

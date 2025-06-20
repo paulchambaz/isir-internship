@@ -54,13 +54,7 @@ def train(
                 )
                 done = terminated or truncated
 
-                agent.algo.buffer.append(
-                    state=state,
-                    action=action,
-                    reward=reward,
-                    done=done,
-                    next_state=next_state,
-                )
+                agent.push_buffer(state, action, reward, next_state, done)
 
                 if training_steps > warmup and training_steps % train_freq == 0:
                     for _ in range(gradient_steps):
@@ -231,7 +225,7 @@ def main() -> None:
     )
 
     if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=10)
+        expert_transitions = expert_mountaincar(train_env, count=100)
         for state, action, reward, next_state, done in expert_transitions:
             agent.replay_buffer.push(state, action, reward, next_state, done)
 

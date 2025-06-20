@@ -58,6 +58,22 @@ class AFUPerrin:
             else self.algo.explore(state)
         )
 
+    def push_buffer(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        reward: float,
+        next_state: np.ndarray,
+        done: bool,  # noqa: FBT001
+    ) -> None:
+        self.algo.buffer.append(
+            state=state,
+            action=action,
+            reward=reward,
+            done=done,
+            next_state=next_state,
+        )
+
     def update(self) -> None:
         self.algo.update()
 
