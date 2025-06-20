@@ -202,9 +202,9 @@ def main() -> None:
         critic_lr=3e-4,
         policy_lr=3e-4,
         temperature_lr=3e-4,
-        tau=0.01,
-        rho=0.4,
-        gamma=0.99,
+        tau=0.005,
+        rho=0.2,
+        gamma=0.999,
         alpha=None,
     )
 
@@ -218,9 +218,9 @@ def main() -> None:
         train_env=train_env,
         test_env=test_env,
         steps=args.steps,
-        warmup=0,
-        train_freq=32,
-        gradient_steps=32,
+        warmup=1000,
+        train_freq=8,
+        gradient_steps=8,
         test_freq=1000,
         count=args.runs,
     )

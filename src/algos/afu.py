@@ -423,7 +423,7 @@ class AFU:
             v_values_nograd = v_values.detach()
 
             # A_xi_i (s, a)
-            a_values = a_network(states, actions)
+            a_values = -a_network(states, actions)
 
             # upsilon_i
             indicator = (v_values + a_values < targets).float()
