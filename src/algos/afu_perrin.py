@@ -59,18 +59,7 @@ class AFUPerrin:
         )
 
     def update(self) -> None:
-        if len(self.replay_buffer) > 0:
-            state, action, reward, next_state, done = self.replay_buffer.get(1)
-
-            self.algo.buffer.append(
-                state=state,
-                action=action,
-                reward=reward,
-                done=done,
-                next_state=next_state,
-            )
-
-            self.algo.update()
+        self.algo.update()
 
     def get_state(self) -> dict:
         return {}

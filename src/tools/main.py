@@ -20,7 +20,7 @@ from .utils import compute_stats
 
 
 def train(
-    agent: algos.SAC,
+    agent: algos.AFUPerrin,
     train_env: gym.Env,
     test_env: gym.Env,
     steps: int,
@@ -29,7 +29,7 @@ def train(
     gradient_steps: int,
     test_freq: int,
     count: int,
-) -> tuple[algos.SAC, dict]:
+) -> tuple[algos.AFUPerrin, dict]:
     history = {}
 
     agent_state = agent.get_state()
@@ -54,8 +54,12 @@ def train(
                 )
                 done = terminated or truncated
 
-                agent.replay_buffer.push(
-                    state, action, reward, next_state, done
+                agent.algo.buffer.append(
+                    state=state,
+                    action=action,
+                    reward=reward,
+                    done=done,
+                    next_state=next_state,
                 )
 
                 if training_steps > warmup and training_steps % train_freq == 0:
