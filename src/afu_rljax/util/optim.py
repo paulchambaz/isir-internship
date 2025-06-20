@@ -38,7 +38,7 @@ def clip_gradient(
     """
     Clip gradients.
     """
-    return jax.tree_map(lambda g: jnp.clip(g, -max_value, max_value), grad)
+    return jax.tree.map(lambda g: jnp.clip(g, -max_value, max_value), grad)
 
 
 @jax.jit
@@ -57,7 +57,7 @@ def clip_gradient_norm(
         clip_coef = jnp.clip(clip_coef, a_max=1.0)
         return g * clip_coef
 
-    return jax.tree_map(lambda g: _clip_gradient_norm(g), grad)
+    return jax.tree.map(lambda g: _clip_gradient_norm(g), grad)
 
 
 @jax.jit
@@ -69,7 +69,7 @@ def soft_update(
     """
     Update target network using Polyak-Ruppert Averaging.
     """
-    return jax.tree_map(
+    return jax.tree.map(
         lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
     )
 
