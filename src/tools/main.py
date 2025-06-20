@@ -225,7 +225,7 @@ def main() -> None:
     )
 
     if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=100)
+        expert_transitions = expert_mountaincar(train_env, count=10)
         for state, action, reward, next_state, done in expert_transitions:
             agent.push_buffer(state, action, reward, next_state, done)
 
