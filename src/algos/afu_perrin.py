@@ -3,13 +3,10 @@ import numpy as np
 
 from afu_rljax.algorithm import AFU
 
-from .replay import ReplayBuffer
-
 
 class AFUPerrin:
     __slots__ = [
         "algo",
-        "replay_buffer",
     ]
 
     def __init__(
@@ -47,7 +44,6 @@ class AFUPerrin:
             seed=42,
             num_agent_steps=100_000,
         )
-        self.replay_buffer = ReplayBuffer(replay_size)
 
     def select_action(
         self, state: np.ndarray, *, evaluation: bool

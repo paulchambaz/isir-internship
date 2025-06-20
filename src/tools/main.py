@@ -227,7 +227,7 @@ def main() -> None:
     if args.env == "mountaincar":
         expert_transitions = expert_mountaincar(train_env, count=100)
         for state, action, reward, next_state, done in expert_transitions:
-            agent.replay_buffer.push(state, action, reward, next_state, done)
+            agent.push_buffer(state, action, reward, next_state, done)
 
     trained_agent, history = train(
         agent=agent,
