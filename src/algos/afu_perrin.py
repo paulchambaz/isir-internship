@@ -3,7 +3,7 @@ import numpy as np
 
 from afu_rljax.algorithm import AFU
 
-from .memory import ReplayBuffer
+from .replay import ReplayBuffer
 
 
 class AFUPerrin:

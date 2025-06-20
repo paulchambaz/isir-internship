@@ -222,6 +222,8 @@ def main() -> None:
         rho=0.3,
         gamma=0.999,
         alpha=None,
+        action_space=train_env.action_space,
+        state_space=train_env.observation_space,
     )
 
     if args.env == "mountaincar":
