@@ -274,21 +274,34 @@ class AFU:
             states, actions, rewards, next_states, dones
         )
 
-        total_loss = q_loss + va1_loss + va2_loss
-
         self.q_optimizer.zero_grad()
         self.v_optimizer1.zero_grad()
         self.a_optimizer1.zero_grad()
         self.v_optimizer2.zero_grad()
         self.a_optimizer2.zero_grad()
 
-        total_loss.backward()
+        q_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            self.q_network.parameters(), max_norm=1.0
+        )
+        va1_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(self.v_network1.parameters())
+            + list(self.a_network1.parameters()),
+            max_norm=1.0,
+        )
+        va2_loss.backward()
+        torch.nn.utils.clip_grad_norm_(
+            list(self.v_network2.parameters())
+            + list(self.a_network2.parameters()),
+            max_norm=1.0,
+        )
 
         self.q_optimizer.step()
-        self.v_optimizer1.step()
         self.a_optimizer1.step()
-        self.v_optimizer2.step()
+        self.v_optimizer1.step()
         self.a_optimizer2.step()
+        self.v_optimizer2.step()
 
         self._soft_update_targets()
 
