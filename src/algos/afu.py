@@ -424,33 +424,24 @@ class AFU:
 
             # A_xi_i (s, a)
             a_values = a_network(states, actions)
-            optim_advantages = -a_values
 
             # upsilon_i
-            # FIX: BACK
-            # indicator = (v_values + a_values < targets).float()
-            # indicator = (targets <= v_values + optim_advantages).float()
-            # upsilon_values = (1 - indicator * self.rho) * v_values + (
-            #     indicator * self.rho
-            # ) * v_values_nograd
-            up_case = (targets <= v_values).float()
-            no_mix_case = (targets <= v_values + optim_advantages).float()
-
-            upsilon_values = no_mix_case * v_values + (1 - no_mix_case) * (
-                self.rho * v_values + (1 - self.rho) * v_values_nograd
-            )
+            indicator = (v_values + a_values < targets).float()
+            upsilon_values = (1 - self.rho * indicator) * v_values + (
+                self.rho * indicator
+            ) * v_values_nograd
 
             # x_i
-            # x_values = upsilon_values - targets.detach()
-
-            loss_critic = (
-                optim_advantages**2
-                + up_case * 2 * optim_advantages * (upsilon_values - targets)
-                + (upsilon_values - targets.detach()) ** 2
-            )
+            x_values = upsilon_values - targets.detach()
 
             # E [ z_i ]
-            return torch.mean(loss_critic)
+            return torch.mean(
+                torch.where(
+                    v_values >= targets,
+                    (x_values + a_values) ** 2,
+                    x_values**2 + a_values**2,
+                )
+            )
 
         return (
             _compute_va_loss_i(self.v_network1, self.a_network1),
