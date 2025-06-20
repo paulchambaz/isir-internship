@@ -219,8 +219,8 @@ def main() -> None:
         test_env=test_env,
         steps=args.steps,
         warmup=1000,
-        train_freq=8,
-        gradient_steps=8,
+        train_freq=1,
+        gradient_steps=1,
         test_freq=1000,
         count=args.runs,
     )
