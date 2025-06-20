@@ -75,14 +75,14 @@ def train(
                 if done or training_steps >= steps:
                     break
 
-            final_evaluation = test(agent, test_env, 100)
-            _, q1, iqm, _, _ = compute_stats(final_evaluation)
+        final_evaluation = test(agent, test_env, 100)
+        _, q1, iqm, _, _ = compute_stats(final_evaluation)
 
-            print(final_evaluation)
+        print(get_stats(final_evaluation))
 
-            if q1 > best_iqm:
-                best_iqm = iqm
-                best_agent_state = agent.get_state()
+        if q1 > best_iqm:
+            best_iqm = iqm
+            best_agent_state = agent.get_state()
 
     agent.load_from_state(best_agent_state)
 
