@@ -275,31 +275,32 @@ class AFU:
         )
 
         self.q_optimizer.zero_grad()
+        q_loss.backward()
+        # torch.nn.utils.clip_grad_norm_(
+        #     self.q_network.parameters(), max_norm=1.0
+        # )
+        self.q_optimizer.step()
+
         self.v_optimizer1.zero_grad()
         self.a_optimizer1.zero_grad()
-        self.v_optimizer2.zero_grad()
-        self.a_optimizer2.zero_grad()
-
-        q_loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            self.q_network.parameters(), max_norm=1.0
-        )
         va1_loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            list(self.v_network1.parameters())
-            + list(self.a_network1.parameters()),
-            max_norm=1.0,
-        )
-        va2_loss.backward()
-        torch.nn.utils.clip_grad_norm_(
-            list(self.v_network2.parameters())
-            + list(self.a_network2.parameters()),
-            max_norm=1.0,
-        )
-
-        self.q_optimizer.step()
+        # torch.nn.utils.clip_grad_norm_(
+        #     list(self.v_network1.parameters())
+        #     + list(self.a_network1.parameters()),
+        #     max_norm=1.0,
+        # )
         self.a_optimizer1.step()
         self.v_optimizer1.step()
+
+        self.v_optimizer2.zero_grad()
+        self.a_optimizer2.zero_grad()
+        va2_loss.backward()
+        # torch.nn.utils.clip_grad_norm_(
+        #     list(self.v_network2.parameters())
+        #     + list(self.a_network2.parameters()),
+        #     max_norm=1.0,
+        # )
+
         self.a_optimizer2.step()
         self.v_optimizer2.step()
 
@@ -392,10 +393,11 @@ class AFU:
         targets = (
             rewards + self.gamma * (1 - dones.float()) * v_targets.detach()
         )
+        # TODO: maybe we should add alpha * log_probs.detach ?
 
         # EE [ 1/2 * (Q_psi (s, a) - y)^2 ]
         q_values = self.q_network(states, actions)
-        return torch.mean((q_values - targets.detach()) ** 2)
+        return torch.mean(0.5 * (q_values - targets.detach()) ** 2)
 
     def _compute_va_loss(
         self,
