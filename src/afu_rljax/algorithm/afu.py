@@ -373,10 +373,8 @@ class AFU(OffPolicyActorCritic):
                 optim_advantages = -jnp.asarray(critic[:-1])
                 up_case = jax.lax.stop_gradient(target_q <= optim_values)
                 no_mix_case = jax.lax.stop_gradient(
-
-                        target_q <= optim_values + optim_advantages
-                        # ) * up_case
-
+                    target_q <= optim_values + optim_advantages
+                    # ) * up_case
                 )
 
                 # mix_case = jax.lax.stop_gradient(
@@ -469,9 +467,7 @@ class AFU(OffPolicyActorCritic):
             reward + (1.0 - done) * self.discount * target_optim_values
         )
         optim_values = jnp.asarray(self.value.apply(params_value, state))
-        q_values = jnp.asarray(
-            self.critic.apply(params_critic, state, action)
-        )
+        q_values = jnp.asarray(self.critic.apply(params_critic, state, action))
         alpha = self.hyperparam
         sp_term = (target_q - optim_values) / alpha
         sp_term = jnp.minimum(sp_term, 5.0)

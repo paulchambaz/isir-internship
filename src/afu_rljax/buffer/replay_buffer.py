@@ -34,7 +34,9 @@ class NStepBuffer:
         return state, action, reward
 
     def nstep_reward(self):
-        reward = np.sum([r * d for r, d in zip(self.reward, self.discount, strict=False)])
+        reward = np.sum(
+            [r * d for r, d in zip(self.reward, self.discount, strict=False)]
+        )
         self.reward.popleft()
         return reward
 
