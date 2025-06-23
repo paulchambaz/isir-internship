@@ -237,7 +237,7 @@ class AFU:
         optim_advantages = -torch.stack(q_values[:-1])
 
         indicator = (
-            (optim_values + optim_advantages <= q_targets.unsqueeze(0))
+            (optim_values + optim_advantages >= q_targets.unsqueeze(0))
             .detach()
             .float()
         )
