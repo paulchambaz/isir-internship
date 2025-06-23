@@ -18,30 +18,35 @@ from .utils import compute_stats
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Test RL algorithms")
-    parser.add_argument(
-        "--file",
-        type=str,
-        required=True,
-        help="History file",
-    )
+    parser.add_argument("--sac", type=str, help="SAC history file")
+    parser.add_argument("--afu", type=str, help="AFU history file")
     args = parser.parse_args()
+
+    colors = ["#d66b6a", "#5591e1", "#6ca247", "#39a985", "#ad75ca", "#c77c1e"]
 
     plt.rcParams["font.size"] = 20
     plt.rcParams["text.usetex"] = True
     plt.rcParams["font.family"] = "serif"
 
-    with open(args.file, "rb") as f:
-        history = pickle.load(f)  # noqa: S301
-
-    steps = [k * 1000 for k in history]
-    stats = [compute_stats(results) for results in history.values()]
-
-    mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
-
     fig, ax = plt.subplots(figsize=(6, 6))
+    color_idx = 0
+    for algo_name in ["sac", "afu"]:
+        file_path = getattr(args, algo_name)
+        if file_path:
+            with open(file_path, "rb") as f:
+                history = pickle.load(f)  # noqa: S301
 
-    ax.plot(steps, iqms, linewidth=2, color="#3498db", label="SAC")
-    ax.fill_between(steps, q1s, q3s, alpha=0.25, color="#3498db")
+            steps = [k * 1000 for k in history]
+            stats = [compute_stats(results) for results in history.values()]
+            mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
+
+            color = colors[color_idx % len(colors)]
+
+            ax.plot(
+                steps, iqms, linewidth=2, color=color, label=algo_name.upper()
+            )
+            ax.fill_between(steps, q1s, q3s, alpha=0.25, color=color)
+            color_idx += 1
 
     ax.set_xlabel("Training Steps")
     plt.gca().xaxis.set_major_formatter(
@@ -52,12 +57,13 @@ def main() -> None:
     ax.grid(visible=True, alpha=0.25)
 
     Path("paper/figures").mkdir(exist_ok=True)
-    plt.savefig(
-        "paper/figures/training_curve.svg",
-        bbox_inches="tight",
-        pad_inches=0,
-        dpi=300,
-    )
+    plt.show()
+    # plt.savefig(
+    #     "paper/figures/training_curve.svg",
+    #     bbox_inches="tight",
+    #     pad_inches=0,
+    #     dpi=300,
+    # )
 
 
 if __name__ == "__main__":

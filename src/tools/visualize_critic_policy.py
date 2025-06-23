@@ -62,7 +62,7 @@ def main() -> None:
         case "afu":
             v1_net = algos.AFU.VNetwork(state_dim, hidden_dims)
             v2_net = algos.AFU.VNetwork(state_dim, hidden_dims)
-            policy_net = algos.AFU.AFUPolicyNetwork(
+            policy_net = algos.AFU.PolicyNetwork(
                 state_dim, hidden_dims, action_dim
             )
 
