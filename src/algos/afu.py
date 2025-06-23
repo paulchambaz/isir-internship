@@ -145,7 +145,7 @@ class AFU:
         self.replay_buffer = ReplayBuffer(replay_size)
         self.batch_size = batch_size
 
-        self.target_entropy = -action_dim
+        self.target_entropy = -float(action_dim)
         self.tau = tau
         self.rho = rho
         self.gamma = gamma
@@ -491,10 +491,7 @@ class AFU:
             return self.model(state).squeeze(-1)
 
     class PolicyNetwork(nn.Module):
-        __slots__ = [
-            "action_dim",
-            "model",
-        ]
+        __slots__ = ["action_dim", "model"]
 
         def __init__(
             self, state_dim: int, hidden_dims: list[int], action_dim: int

@@ -1,7 +1,8 @@
 import gymnasium as gym
 import numpy as np
 
-from afu_rljax.algorithm import AFU
+# from afu_rljax.algorithm import AFU
+from .afu2 import AFU
 
 
 class AFUPerrin:
@@ -39,8 +40,6 @@ class AFUPerrin:
             tau=tau,
             gradient_reduction=rho,
             gamma=gamma,
-            variant="alpha",
-            alg="AFU",
             seed=42,
             num_agent_steps=100_000,
         )

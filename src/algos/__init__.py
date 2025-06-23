@@ -11,7 +11,7 @@
 __version__ = "0.1.0"
 __author__ = "Paul Chambaz"
 
-from .afu import AFU
+from .afu3 import AFU
 from .afu_perrin import AFUPerrin
 from .sac import SAC
 from .simple_right import SimpleRight

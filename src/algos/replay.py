@@ -38,17 +38,6 @@ class ReplayBuffer:
         batches = [np.array(batch) for batch in zip(*transitions, strict=True)]
         return tuple(torch.from_numpy(batch) for batch in batches)
 
-    def get(
-        self, batch_size: int
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-    ]:
-        num_transitions = min(batch_size, len(self.buffer))
-        transitions = list(self.buffer)[:num_transitions]
-
-        batches = [np.array(batch) for batch in zip(*transitions, strict=True)]
-        return tuple(torch.from_numpy(batch) for batch in batches)
-
     def get_data(self) -> list:
         return list(self.buffer)
 
