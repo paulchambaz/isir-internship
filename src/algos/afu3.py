@@ -316,10 +316,6 @@ class AFU:
         next_states: torch.Tensor,
         dones: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Unified critic loss combining AFU V-A decomposition logic with Q TD error.
-        This prevents the double-counting bug from the original separated losses.
-        """
         with torch.no_grad():
             next_v_values = self.v_target_network(next_states)
             target_v = torch.min(torch.stack(next_v_values), dim=0)[0]
@@ -361,7 +357,15 @@ class AFU:
     def _compute_policy_loss(
         self, states: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        actions, log_probs = self._compute_action_and_log_prob(states)
+        mean, log_std = self.policy_network(states)
+        std = log_std.exp()
+        normal = torch.distributions.Normal(mean, std)
+        raw_action = normal.rsample()
+        actions = torch.tanh(raw_action)
+
+        log_prob = normal.log_prob(raw_action)
+        log_prob -= torch.log(torch.relu(1 - actions.pow(2)) + 1e-6)
+        log_probs = log_prob.sum(dim=-1, keepdim=True)
 
         q_values = self.q_network(states, actions)
         q_value = q_values[-1]
@@ -375,18 +379,3 @@ class AFU:
         )
 
         return policy_loss, temperature_loss
-
-    def _compute_action_and_log_prob(
-        self, state: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        mean, log_std = self.policy_network(state)
-        std = log_std.exp()
-        normal = torch.distributions.Normal(mean, std)
-        raw_action = normal.rsample()
-        action = torch.tanh(raw_action)
-
-        log_prob = normal.log_prob(raw_action)
-        log_prob -= torch.log(1 - action.pow(2) + 1e-6)
-        log_prob = log_prob.sum(dim=-1, keepdim=True)
-
-        return action, log_prob
