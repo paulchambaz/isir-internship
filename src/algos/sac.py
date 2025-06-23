@@ -16,54 +16,6 @@ from torch import nn
 from .replay import ReplayBuffer
 
 
-class QNetwork(nn.Module):
-    __slots__ = ["model"]
-
-    def __init__(
-        self, state_dim: int, hidden_dims: list[int], action_dim: int
-    ) -> None:
-        super().__init__()
-        layers = [nn.Linear(state_dim + action_dim, hidden_dims[0]), nn.ReLU()]
-        for in_dim, out_dim in itertools.pairwise(hidden_dims):
-            layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-        layers.append(nn.Linear(hidden_dims[-1], 1))
-
-        self.model = nn.Sequential(*layers)
-
-    def forward(
-        self, state: torch.Tensor, action: torch.Tensor
-    ) -> torch.Tensor:
-        state_action = torch.cat([state, action], dim=1)
-        return self.model(state_action).squeeze(-1)
-
-
-class PolicyNetwork(nn.Module):
-    __slots__ = [
-        "action_dim",
-        "model",
-    ]
-
-    def __init__(
-        self, state_dim: int, hidden_dims: list[int], action_dim: int
-    ) -> None:
-        super().__init__()
-        layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-        for in_dim, out_dim in itertools.pairwise(hidden_dims):
-            layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-        layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
-
-        self.model = nn.Sequential(*layers)
-        self.action_dim = action_dim
-
-    def forward(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        output = self.model(state)
-        mean, log_std = torch.split(output, self.action_dim, dim=-1)
-
-        log_std = torch.clamp(log_std, -20, 2)
-
-        return mean, log_std
-
-
 class SAC:
     """
     Soft Actor-Critic (SAC) algorithm for continuous control tasks.
@@ -86,6 +38,57 @@ class SAC:
         alpha: If None, learn alpha, if float, use fixed alpha value
         state: Optional pre-trained network state dictionary
     """
+
+    class QNetwork(nn.Module):
+        __slots__ = ["model"]
+
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], action_dim: int
+        ) -> None:
+            super().__init__()
+            layers = [
+                nn.Linear(state_dim + action_dim, hidden_dims[0]),
+                nn.ReLU(),
+            ]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], 1))
+
+            self.model = nn.Sequential(*layers)
+
+        def forward(
+            self, state: torch.Tensor, action: torch.Tensor
+        ) -> torch.Tensor:
+            state_action = torch.cat([state, action], dim=1)
+            return self.model(state_action).squeeze(-1)
+
+    class PolicyNetwork(nn.Module):
+        __slots__ = [
+            "action_dim",
+            "model",
+        ]
+
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], action_dim: int
+        ) -> None:
+            super().__init__()
+            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
+
+            self.model = nn.Sequential(*layers)
+            self.action_dim = action_dim
+
+        def forward(
+            self, state: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            output = self.model(state)
+            mean, log_std = torch.split(output, self.action_dim, dim=-1)
+
+            log_std = torch.clamp(log_std, -20, 2)
+
+            return mean, log_std
 
     __slots__ = [
         "action_dim",
@@ -127,15 +130,21 @@ class SAC:
         self.action_dim = action_dim
         self.learn_temperature = alpha is None
 
-        self.q_network1 = QNetwork(state_dim, hidden_dims, action_dim)
-        self.q_network2 = QNetwork(state_dim, hidden_dims, action_dim)
+        self.q_network1 = self.QNetwork(state_dim, hidden_dims, action_dim)
+        self.q_network2 = self.QNetwork(state_dim, hidden_dims, action_dim)
 
-        self.q_target_network1 = QNetwork(state_dim, hidden_dims, action_dim)
-        self.q_target_network2 = QNetwork(state_dim, hidden_dims, action_dim)
+        self.q_target_network1 = self.QNetwork(
+            state_dim, hidden_dims, action_dim
+        )
+        self.q_target_network2 = self.QNetwork(
+            state_dim, hidden_dims, action_dim
+        )
         self.q_target_network1.load_state_dict(self.q_network1.state_dict())
         self.q_target_network2.load_state_dict(self.q_network2.state_dict())
 
-        self.policy_network = PolicyNetwork(state_dim, hidden_dims, action_dim)
+        self.policy_network = self.PolicyNetwork(
+            state_dim, hidden_dims, action_dim
+        )
 
         self.log_alpha = (
             nn.Parameter(torch.zeros(1))

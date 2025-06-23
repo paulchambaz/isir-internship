@@ -16,91 +16,6 @@ from torch import nn
 from .replay import ReplayBuffer
 
 
-class QNetwork(nn.Module):
-    __slots__ = ["model"]
-
-    def __init__(
-        self, state_dim: int, hidden_dims: list[int], action_dim: int
-    ) -> None:
-        super().__init__()
-        layers = [nn.Linear(state_dim + action_dim, hidden_dims[0]), nn.ReLU()]
-        for in_dim, out_dim in itertools.pairwise(hidden_dims):
-            layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-        layers.append(nn.Linear(hidden_dims[-1], 1))
-
-        self.model = nn.Sequential(*layers)
-
-    def forward(
-        self, state: torch.Tensor, action: torch.Tensor
-    ) -> torch.Tensor:
-        state_action = torch.cat([state, action], dim=1)
-        return self.model(state_action).squeeze(-1)
-
-
-class ANetwork(nn.Module):
-    __slots__ = ["model"]
-
-    def __init__(
-        self, state_dim: int, hidden_dims: list[int], action_dim: int
-    ) -> None:
-        super().__init__()
-        layers = [nn.Linear(state_dim + action_dim, hidden_dims[0]), nn.ReLU()]
-        for in_dim, out_dim in itertools.pairwise(hidden_dims):
-            layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-        layers.append(nn.Linear(hidden_dims[-1], 1))
-
-        self.model = nn.Sequential(*layers)
-
-    def forward(
-        self, state: torch.Tensor, action: torch.Tensor
-    ) -> torch.Tensor:
-        state_action = torch.cat([state, action], dim=1)
-        return self.model(state_action).squeeze(-1)
-
-
-class VNetwork(nn.Module):
-    __slots__ = ["model"]
-
-    def __init__(self, state_dim: int, hidden_dims: list[int]) -> None:
-        super().__init__()
-        layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-        for in_dim, out_dim in itertools.pairwise(hidden_dims):
-            layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-        layers.append(nn.Linear(hidden_dims[-1], 1))
-
-        self.model = nn.Sequential(*layers)
-
-    def forward(self, state: torch.Tensor) -> torch.Tensor:
-        return self.model(state).squeeze(-1)
-
-
-class PolicyNetwork(nn.Module):
-    __slots__ = [
-        "action_dim",
-        "model",
-    ]
-
-    def __init__(
-        self, state_dim: int, hidden_dims: list[int], action_dim: int
-    ) -> None:
-        super().__init__()
-        layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-        for in_dim, out_dim in itertools.pairwise(hidden_dims):
-            layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-        layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
-
-        self.model = nn.Sequential(*layers)
-        self.action_dim = action_dim
-
-    def forward(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        output = self.model(state)
-        mean, log_std = torch.split(output, self.action_dim, dim=-1)
-
-        log_std = torch.clamp(log_std, -20, 2)
-
-        return mean, log_std
-
-
 class AFU:
     """
     Actor-Free critic Updates (AFU) algorithm for continuous control tasks.
@@ -176,20 +91,22 @@ class AFU:
         self.action_dim = action_dim
         self.learn_temperature = alpha is None
 
-        self.q_network = QNetwork(state_dim, hidden_dims, action_dim)
+        self.q_network = self.QNetwork(state_dim, hidden_dims, action_dim)
 
-        self.v_network1 = VNetwork(state_dim, hidden_dims)
-        self.v_network2 = VNetwork(state_dim, hidden_dims)
+        self.v_network1 = self.VNetwork(state_dim, hidden_dims)
+        self.v_network2 = self.VNetwork(state_dim, hidden_dims)
 
-        self.v_target_network1 = VNetwork(state_dim, hidden_dims)
-        self.v_target_network2 = VNetwork(state_dim, hidden_dims)
+        self.v_target_network1 = self.VNetwork(state_dim, hidden_dims)
+        self.v_target_network2 = self.VNetwork(state_dim, hidden_dims)
         self.v_target_network1.load_state_dict(self.v_network1.state_dict())
         self.v_target_network2.load_state_dict(self.v_network2.state_dict())
 
-        self.a_network1 = ANetwork(state_dim, hidden_dims, action_dim)
-        self.a_network2 = ANetwork(state_dim, hidden_dims, action_dim)
+        self.a_network1 = self.ANetwork(state_dim, hidden_dims, action_dim)
+        self.a_network2 = self.ANetwork(state_dim, hidden_dims, action_dim)
 
-        self.policy_network = PolicyNetwork(state_dim, hidden_dims, action_dim)
+        self.policy_network = self.PolicyNetwork(
+            state_dim, hidden_dims, action_dim
+        )
 
         self.log_alpha = (
             nn.Parameter(torch.zeros(1))
@@ -512,3 +429,92 @@ class AFU:
                 target_param.data.copy_(
                     self.tau * param.data + (1.0 - self.tau) * target_param.data
                 )
+
+    class QNetwork(nn.Module):
+        __slots__ = ["model"]
+
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], action_dim: int
+        ) -> None:
+            super().__init__()
+            layers = [
+                nn.Linear(state_dim + action_dim, hidden_dims[0]),
+                nn.ReLU(),
+            ]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], 1))
+
+            self.model = nn.Sequential(*layers)
+
+        def forward(
+            self, state: torch.Tensor, action: torch.Tensor
+        ) -> torch.Tensor:
+            state_action = torch.cat([state, action], dim=1)
+            return self.model(state_action).squeeze(-1)
+
+    class ANetwork(nn.Module):
+        __slots__ = ["model"]
+
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], action_dim: int
+        ) -> None:
+            super().__init__()
+            layers = [
+                nn.Linear(state_dim + action_dim, hidden_dims[0]),
+                nn.ReLU(),
+            ]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], 1))
+
+            self.model = nn.Sequential(*layers)
+
+        def forward(
+            self, state: torch.Tensor, action: torch.Tensor
+        ) -> torch.Tensor:
+            state_action = torch.cat([state, action], dim=1)
+            return self.model(state_action).squeeze(-1)
+
+    class VNetwork(nn.Module):
+        __slots__ = ["model"]
+
+        def __init__(self, state_dim: int, hidden_dims: list[int]) -> None:
+            super().__init__()
+            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], 1))
+
+            self.model = nn.Sequential(*layers)
+
+        def forward(self, state: torch.Tensor) -> torch.Tensor:
+            return self.model(state).squeeze(-1)
+
+    class PolicyNetwork(nn.Module):
+        __slots__ = [
+            "action_dim",
+            "model",
+        ]
+
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], action_dim: int
+        ) -> None:
+            super().__init__()
+            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
+
+            self.model = nn.Sequential(*layers)
+            self.action_dim = action_dim
+
+        def forward(
+            self, state: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            output = self.model(state)
+            mean, log_std = torch.split(output, self.action_dim, dim=-1)
+
+            log_std = torch.clamp(log_std, -20, 2)
+
+            return mean, log_std
