@@ -176,7 +176,7 @@ def main() -> None:
 
     env_name = envs[args.env]
     train_env = gym.make(env_name)
-    test_env = gym.make(env_name, render_mode="human")
+    test_env = gym.make(env_name)
 
     # agent = algos.SAC(
     #     action_dim=train_env.action_space.shape[0],
