@@ -18,7 +18,7 @@ import algos
 POSITION_MIN = -1.2
 POSITION_MAX = 0.6
 VELOCITY_MIN = -0.07
-VELOCITY_MAX = -0.07
+VELOCITY_MAX = 0.07
 
 ACTION_MIN = -1.0
 ACTION_MAX = 1.0
@@ -78,21 +78,37 @@ def main() -> None:
         for j, vel in enumerate(velocities):
             state = torch.tensor([[pos, vel]], dtype=torch.float32)
 
-            match args.algorith:
+            match args.algorithm:
                 case "sac":
-                    # TODO: COMPUTE
-                    v_value = 0
+                    n_actions = 50
+
+                    actions_batch = torch.linspace(
+                        ACTION_MIN, ACTION_MAX, n_actions
+                    ).unsqueeze(1)
+                    states_batch = state.expand(n_actions, -1)
+
+                    q1_values = q1_net(states_batch, actions_batch)
+                    q2_values = q2_net(states_batch, actions_batch)
+                    q_values = torch.min(q1_values, q2_values)
+
+                    v_value = float(torch.max(q_values))
                 case "afu":
-                    # TODO: COMPUTE
-                    v_value = 0
+                    v1_value = v1_net(state)
+                    v2_value = v2_net(state)
+
+                    v_value = float(torch.min(v1_value, v2_value))
 
             v_values[j, i] = v_value
 
-            # TODO: compute
-            action = 0
+            mean, _ = policy_net(state)
+            action = float(torch.tanh(mean).squeeze())
             actions[j, i] = action
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6, 6))
+    plt.rcParams["font.size"] = 20
+    plt.rcParams["text.usetex"] = True
+    plt.rcParams["font.family"] = "serif"
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     extent = [POSITION_MIN, POSITION_MAX, VELOCITY_MIN, VELOCITY_MAX]
     im1 = ax1.imshow(
         v_values,
@@ -101,7 +117,7 @@ def main() -> None:
         origin="lower",
         cmap="viridis",
     )
-    ax1.set_title(f"Value function V(s) - {args.algorithm.upper()}")
+    ax1.set_title(rf"Value function $V(s)$ - {args.algorithm.upper()}")
     ax1.set_xlabel("Position")
     ax1.set_ylabel("Velocity")
     plt.colorbar(im1, ax=ax1)
@@ -111,18 +127,14 @@ def main() -> None:
         extent=extent,
         aspect="auto",
         origin="lower",
-        cmap="RdBu",
+        cmap="hot",
         vmin=-1,
         vmax=1,
     )
-    ax2.set_title(f"Policy actions π(s) - {args.algorithm.upper()}")
+    ax2.set_title(rf"Policy actions $\pi(s)$ - {args.algorithm.upper()}")
     ax2.set_xlabel("Position")
     ax2.set_ylabel("Velocity")
     plt.colorbar(im2, ax=ax2)
-
-    for ax in [ax1, ax2]:
-        ax.axvline(x=0.45, color="red", linestyle="--", alpha=0.7, label="Goal")
-        ax.legend()
 
     plt.tight_layout()
     plt.show()
