@@ -9,6 +9,7 @@
 import argparse
 import pickle
 
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -22,6 +23,8 @@ VELOCITY_MAX = 0.07
 
 ACTION_MIN = -1.0
 ACTION_MAX = 1.0
+
+GOAL_POSITION = 0.45
 
 
 def main() -> None:
@@ -66,6 +69,52 @@ def main() -> None:
             v1_net.load_state_dict(state_dict["v1"])
             v2_net.load_state_dict(state_dict["v2"])
             policy_net.load_state_dict(state_dict["policy"])
+
+    env = gym.make("MountainCarContinuous-v0")
+
+    trajectories = []
+    n_episodes = 3
+    for _ in range(n_episodes):
+        trajectory = []
+        state, _ = env.reset()
+
+        while True:
+            trajectory.append([state[0], state[1]])
+
+            state_tensor = torch.tensor(
+                [[state[0], state[1]]], dtype=torch.float32
+            )
+            mean, _ = policy_net(state_tensor)
+            action = float(torch.tanh(mean).item())
+
+            next_state, _, terminated, truncated, _ = env.step([action])
+            done = terminated or truncated
+
+            if done:
+                break
+
+            state = next_state
+
+        trajectories.append(np.array(trajectory))
+
+    env.close()
+
+    max_len = max(len(traj) for traj in trajectories)
+    avg_trajectory = []
+
+    for step in range(max_len):
+        positions = []
+        velocities = []
+
+        for traj in trajectories:
+            if step < len(traj) and traj[step][0] < GOAL_POSITION:
+                positions.append(traj[step][0])
+                velocities.append(traj[step][1])
+
+        if positions:
+            avg_trajectory.append([np.mean(positions), np.mean(velocities)])
+        else:
+            break
 
     grid_size = 50
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
@@ -135,6 +184,16 @@ def main() -> None:
     ax2.set_xlabel("Position")
     ax2.set_ylabel("Velocity")
     plt.colorbar(im2, ax=ax2)
+
+    ax1.axvline(x=GOAL_POSITION, color="black", linestyle="--", linewidth=1)
+    ax2.axvline(x=GOAL_POSITION, color="#3498db", linestyle="--", linewidth=1)
+
+    if len(avg_trajectory) > 1:
+        avg_trajectory = np.array(avg_trajectory)
+        positions_avg = avg_trajectory[::2, 0]
+        velocities_avg = avg_trajectory[::2, 1]
+        ax1.scatter(positions_avg, velocities_avg, c="black", s=4)
+        ax2.scatter(positions_avg, velocities_avg, c="#3498db", s=4)
 
     plt.tight_layout()
     plt.show()

@@ -320,11 +320,10 @@ class AFU:
         targets = (
             rewards + self.gamma * (1 - dones.float()) * v_targets.detach()
         )
-        # TODO: maybe we should add alpha * log_probs.detach ?
 
         # EE [ 1/2 * (Q_psi (s, a) - y)^2 ]
         q_values = self.q_network(states, actions)
-        return torch.mean(0.5 * (q_values - targets.detach()) ** 2)
+        return torch.mean((q_values - targets.detach()) ** 2)
 
     def _compute_va_loss(
         self,
@@ -340,7 +339,7 @@ class AFU:
         v_targets = torch.min(v1_targets, v2_targets)
 
         # r + gamma (1 - d) (min V(s'))
-        targets = (
+        q_targets = (
             rewards + self.gamma * (1 - dones.float()) * v_targets.detach()
         )
 
@@ -355,18 +354,18 @@ class AFU:
             a_values = a_network(states, actions)
 
             # upsilon_i
-            indicator = (v_values + a_values < targets).float()
+            indicator = (v_values + a_values < q_targets).float()
             upsilon_values = (1 - self.rho * indicator) * v_values + (
                 self.rho * indicator
             ) * v_values_nograd
 
             # x_i
-            x_values = upsilon_values - targets.detach()
+            x_values = upsilon_values - q_targets
 
             # E [ z_i ]
             return torch.mean(
                 torch.where(
-                    v_values - targets >= 0,
+                    v_values >= q_targets,
                     (x_values + a_values) ** 2,
                     x_values**2 + a_values**2,
                 )

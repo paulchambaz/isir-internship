@@ -64,8 +64,8 @@ def train(
                 training_steps += 1
                 progress.update(1)
 
-                if training_steps % test_freq == 0:
-                    results = test(agent, test_env, 10)
+                if training_steps > warmup and training_steps % test_freq == 0:
+                    results = test(agent, test_env, 1)
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
                     progress.set_postfix({"eval": get_stats(results)})
@@ -176,7 +176,7 @@ def main() -> None:
 
     env_name = envs[args.env]
     train_env = gym.make(env_name)
-    test_env = gym.make(env_name)
+    test_env = gym.make(env_name, render_mode="human")
 
     agent = algos.SAC(
         action_dim=train_env.action_space.shape[0],
