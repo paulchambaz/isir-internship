@@ -236,26 +236,28 @@ class AFU:
         q_final = q_values[-1]
         optim_advantages = -torch.stack(q_values[:-1])
 
-        indicator = (
-            (optim_values + optim_advantages <= q_targets.unsqueeze(0))
+        no_mix_case = (
+            (q_targets.unsqueeze(0) <= optim_values + optim_advantages)
             .detach()
             .float()
         )
 
-        upsilon_values = (
-            1 - self.rho * indicator
-        ) * optim_values + self.rho * indicator * optim_values.detach()
+        mix_gd_optim_values = (1 - no_mix_case) * (
+            ((1 - self.rho) * optim_values).detach() + self.rho * optim_values
+        ) + no_mix_case * optim_values
 
-        target_diff = upsilon_values - q_targets.unsqueeze(0)
+        target_diff = mix_gd_optim_values - q_targets.unsqueeze(0)
+
+        up_case = (q_targets.unsqueeze(0) <= optim_values).detach().float()
+
         va_loss = torch.mean(
-            torch.where(
-                optim_values >= q_targets.unsqueeze(0),
-                (optim_advantages + target_diff) ** 2,
-                optim_advantages**2 + target_diff**2,
-            )
+            optim_advantages**2
+            + up_case * 2 * optim_advantages * target_diff
+            + target_diff**2
         )
 
-        q_loss = torch.mean((q_targets - q_final) ** 2)
+        td_error = q_targets - q_final
+        q_loss = torch.mean(td_error**2)
 
         return va_loss + q_loss
 
