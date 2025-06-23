@@ -187,8 +187,8 @@ def main() -> None:
         critic_lr=3e-4,
         policy_lr=3e-4,
         temperature_lr=3e-4,
-        tau=0.005,
-        gamma=0.999,
+        tau=0.01,
+        gamma=0.99,
         alpha=None,
     )
 
@@ -225,7 +225,7 @@ def main() -> None:
     # )
 
     if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=10)
+        expert_transitions = expert_mountaincar(train_env, count=20)
         for state, action, reward, next_state, done in expert_transitions:
             agent.push_buffer(state, action, reward, next_state, done)
 
@@ -235,8 +235,8 @@ def main() -> None:
         test_env=test_env,
         steps=args.steps,
         warmup=10000,
-        train_freq=1,
-        gradient_steps=1,
+        train_freq=32,
+        gradient_steps=32,
         test_freq=1000,
         count=args.runs,
     )
