@@ -245,7 +245,7 @@ class AFU:
             ((1 - self.rho) * optim_values).detach() + self.rho * optim_values
         ) + indicator * optim_values
 
-        up_case = (optim_values >= q_targets.unsqueeze(0)).detach().float()
+        up_case = (optim_values >= q_targets.unsqueeze(0)).detach()
 
         target_diff = upsilon_values - q_targets.unsqueeze(0)
         z_values = torch.where(
