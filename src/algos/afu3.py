@@ -237,13 +237,13 @@ class AFU:
         optim_advantages = -torch.stack(q_values[:-1])
 
         indicator = (
-            (optim_values + optim_advantages >= q_targets.unsqueeze(0))
+            (optim_values + optim_advantages <= q_targets.unsqueeze(0))
             .detach()
             .float()
         )
-        upsilon_values = (1 - indicator) * (
-            ((1 - self.rho) * optim_values).detach() + self.rho * optim_values
-        ) + indicator * optim_values
+        upsilon_values = (
+            1.0 - self.rho * indicator
+        ) * optim_values + self.rho * indicator * optim_values.detach()
 
         target_diff = upsilon_values - q_targets.unsqueeze(0)
         z_values = torch.where(
