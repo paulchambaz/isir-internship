@@ -248,11 +248,12 @@ class AFU:
         up_case = (optim_values >= q_targets.unsqueeze(0)).detach().float()
 
         target_diff = upsilon_values - q_targets.unsqueeze(0)
-        va_loss = torch.mean(
-            optim_advantages**2
-            + up_case * 2 * optim_advantages * target_diff
-            + target_diff**2
+        z_values = torch.where(
+            up_case,
+            (optim_advantages + target_diff) ** 2,
+            optim_advantages**2 + target_diff**2,
         )
+        va_loss = torch.mean(z_values)
 
         q_loss = torch.mean((q_targets - q_final) ** 2)
 
