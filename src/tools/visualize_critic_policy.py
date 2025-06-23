@@ -60,15 +60,17 @@ def main() -> None:
             q2_net.load_state_dict(state_dict["q2"])
             policy_net.load_state_dict(state_dict["policy"])
         case "afu":
-            v1_net = algos.AFU.VNetwork(state_dim, hidden_dims)
-            v2_net = algos.AFU.VNetwork(state_dim, hidden_dims)
+            v_net = algos.AFU.VNetwork(state_dim, hidden_dims, num_critics=2)
             policy_net = algos.AFU.PolicyNetwork(
-                state_dim, hidden_dims, action_dim
+                state_dim,
+                action_dim,
+                hidden_dims,
+                log_std_min=-10.0,
+                log_std_max=2.0,
             )
 
-            v1_net.load_state_dict(state_dict["v1"])
-            v2_net.load_state_dict(state_dict["v2"])
-            policy_net.load_state_dict(state_dict["policy"])
+            v_net.load_state_dict(state_dict["v_network"])
+            policy_net.load_state_dict(state_dict["policy_network"])
 
     env = gym.make("MountainCarContinuous-v0")
 
@@ -142,10 +144,10 @@ def main() -> None:
 
                     v_value = float(torch.max(q_values))
                 case "afu":
-                    v1_value = v1_net(state)
-                    v2_value = v2_net(state)
-
-                    v_value = float(torch.min(v1_value, v2_value))
+                    with torch.no_grad():
+                        v_values_list = v_net(state)
+                        v_stacked = torch.stack(v_values_list)
+                        v_value = float(torch.min(v_stacked, dim=0)[0])
 
             v_values[j, i] = v_value
 

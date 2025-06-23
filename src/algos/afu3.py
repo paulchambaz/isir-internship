@@ -8,100 +8,6 @@ from torch import nn
 from .replay import ReplayBuffer
 
 
-class QNetwork(nn.Module):
-    __slots__ = ["networks"]
-
-    def __init__(
-        self,
-        state_dim: int,
-        action_dim: int,
-        hidden_dims: list[int],
-        *,
-        num_critics: int,
-    ) -> None:
-        super().__init__()
-        self.networks = nn.ModuleList()
-
-        for _ in range(num_critics):
-            input_dim = state_dim + action_dim
-            layers = [nn.Linear(input_dim, hidden_dims[0]), nn.ReLU()]
-            nn.init.orthogonal_(layers[0].weight, gain=math.sqrt(2))
-
-            for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                linear_layer = nn.Linear(in_dim, out_dim)
-                nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
-                layers.extend([linear_layer, nn.ReLU()])
-
-            layers.append(nn.Linear(hidden_dims[-1], 1))
-            self.networks.append(nn.Sequential(*layers))
-
-    def forward(
-        self, state: torch.Tensor, action: torch.Tensor
-    ) -> list[torch.Tensor]:
-        state_action = torch.cat([state, action], dim=1)
-        return [network(state_action).squeeze(-1) for network in self.networks]
-
-
-class VNetwork(nn.Module):
-    __slots__ = ["networks"]
-
-    def __init__(
-        self, state_dim: int, hidden_dims: list[int], *, num_critics: int
-    ) -> None:
-        super().__init__()
-        self.networks = nn.ModuleList()
-
-        for _ in range(num_critics):
-            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-            nn.init.orthogonal_(layers[0].weight, gain=math.sqrt(2))
-
-            for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                linear_layer = nn.Linear(in_dim, out_dim)
-                nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
-                layers.extend([linear_layer, nn.ReLU()])
-
-            layers.append(nn.Linear(hidden_dims[-1], 1))
-            self.networks.append(nn.Sequential(*layers))
-
-    def forward(self, state: torch.Tensor) -> list[torch.Tensor]:
-        return [network(state).squeeze(-1) for network in self.networks]
-
-
-class PolicyNetwork(nn.Module):
-    __slots__ = ["log_std_max", "log_std_min", "network"]
-
-    def __init__(
-        self,
-        state_dim: int,
-        action_dim: int,
-        hidden_dims: list[int],
-        *,
-        log_std_min: float,
-        log_std_max: float,
-    ) -> None:
-        super().__init__()
-        self.action_dim = action_dim
-        self.log_std_min = log_std_min
-        self.log_std_max = log_std_max
-
-        layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-        nn.init.orthogonal_(layers[0].weight, gain=math.sqrt(2))
-
-        for in_dim, out_dim in itertools.pairwise(hidden_dims):
-            linear_layer = nn.Linear(in_dim, out_dim)
-            nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
-            layers.extend([linear_layer, nn.ReLU()])
-
-        layers.append(nn.Linear(hidden_dims[-1], 2 * action_dim))
-        self.network = nn.Sequential(*layers)
-
-    def forward(self, state: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        output = self.network(state)
-        mean, log_std = torch.split(output, self.action_dim, dim=-1)
-        log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
-        return mean, log_std
-
-
 class AFU:
     """
     Actor-Free critic Updates (AFU) algorithm for continuous control tasks.
@@ -149,15 +55,17 @@ class AFU:
         self.action_dim = action_dim
         self.learn_temperature = alpha is None
 
-        self.q_network = QNetwork(
+        self.q_network = self.QNetwork(
             state_dim, action_dim, hidden_dims, num_critics=3
         )
 
-        self.v_network = VNetwork(state_dim, hidden_dims, num_critics=2)
-        self.v_target_network = VNetwork(state_dim, hidden_dims, num_critics=2)
+        self.v_network = self.VNetwork(state_dim, hidden_dims, num_critics=2)
+        self.v_target_network = self.VNetwork(
+            state_dim, hidden_dims, num_critics=2
+        )
         self.v_target_network.load_state_dict(self.v_network.state_dict())
 
-        self.policy_network = PolicyNetwork(
+        self.policy_network = self.PolicyNetwork(
             state_dim,
             action_dim,
             hidden_dims,
@@ -318,39 +226,36 @@ class AFU:
     ) -> torch.Tensor:
         with torch.no_grad():
             next_v_values = self.v_target_network(next_states)
-            target_v = torch.min(torch.stack(next_v_values), dim=0)[0]
-            target_q = rewards + self.gamma * (1 - dones.float()) * target_v
+            v_targets = torch.min(torch.stack(next_v_values), dim=0)[0]
+            q_targets = rewards + self.gamma * (1 - dones.float()) * v_targets
 
         v_values = self.v_network(states)
-        q_values = self.q_network(states, actions)
-
         optim_values = torch.stack(v_values)
+
+        q_values = self.q_network(states, actions)
         q_final = q_values[-1]
         optim_advantages = -torch.stack(q_values[:-1])
 
-        grad_red = self.rho
-
-        up_case = (target_q.unsqueeze(0) <= optim_values).detach().float()
-        no_mix_case = (
-            (target_q.unsqueeze(0) <= optim_values + optim_advantages)
+        indicator = (
+            (optim_values + optim_advantages <= q_targets.unsqueeze(0))
             .detach()
             .float()
         )
 
-        mix_gd_optim_values = (1 - no_mix_case) * (
-            ((1 - grad_red) * optim_values).detach() + grad_red * optim_values
-        ) + no_mix_case * optim_values
+        upsilon_values = (
+            1 - self.rho * indicator
+        ) * optim_values + self.rho * indicator * optim_values.detach()
 
-        target_diff = mix_gd_optim_values - target_q.unsqueeze(0)
-
+        target_diff = upsilon_values - q_targets.unsqueeze(0)
         va_loss = torch.mean(
-            optim_advantages**2
-            + up_case * 2 * optim_advantages * target_diff
-            + target_diff**2
+            torch.where(
+                optim_values >= q_targets.unsqueeze(0),
+                (optim_advantages + target_diff) ** 2,
+                optim_advantages**2 + target_diff**2,
+            )
         )
 
-        td_error = target_q - q_final
-        q_loss = torch.mean(td_error**2)
+        q_loss = torch.mean((q_targets - q_final) ** 2)
 
         return va_loss + q_loss
 
@@ -379,3 +284,98 @@ class AFU:
         )
 
         return policy_loss, temperature_loss
+
+    class QNetwork(nn.Module):
+        __slots__ = ["networks"]
+
+        def __init__(
+            self,
+            state_dim: int,
+            action_dim: int,
+            hidden_dims: list[int],
+            *,
+            num_critics: int,
+        ) -> None:
+            super().__init__()
+            self.networks = nn.ModuleList()
+
+            for _ in range(num_critics):
+                input_dim = state_dim + action_dim
+                layers = [nn.Linear(input_dim, hidden_dims[0]), nn.ReLU()]
+                nn.init.orthogonal_(layers[0].weight, gain=math.sqrt(2))
+
+                for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                    linear_layer = nn.Linear(in_dim, out_dim)
+                    nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
+                    layers.extend([linear_layer, nn.ReLU()])
+
+                layers.append(nn.Linear(hidden_dims[-1], 1))
+                self.networks.append(nn.Sequential(*layers))
+
+        def forward(
+            self, state: torch.Tensor, action: torch.Tensor
+        ) -> list[torch.Tensor]:
+            state_action = torch.cat([state, action], dim=1)
+            return [
+                network(state_action).squeeze(-1) for network in self.networks
+            ]
+
+    class VNetwork(nn.Module):
+        __slots__ = ["networks"]
+
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], *, num_critics: int
+        ) -> None:
+            super().__init__()
+            self.networks = nn.ModuleList()
+
+            for _ in range(num_critics):
+                layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
+                nn.init.orthogonal_(layers[0].weight, gain=math.sqrt(2))
+
+                for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                    linear_layer = nn.Linear(in_dim, out_dim)
+                    nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
+                    layers.extend([linear_layer, nn.ReLU()])
+
+                layers.append(nn.Linear(hidden_dims[-1], 1))
+                self.networks.append(nn.Sequential(*layers))
+
+        def forward(self, state: torch.Tensor) -> list[torch.Tensor]:
+            return [network(state).squeeze(-1) for network in self.networks]
+
+    class PolicyNetwork(nn.Module):
+        __slots__ = ["log_std_max", "log_std_min", "network"]
+
+        def __init__(
+            self,
+            state_dim: int,
+            action_dim: int,
+            hidden_dims: list[int],
+            *,
+            log_std_min: float,
+            log_std_max: float,
+        ) -> None:
+            super().__init__()
+            self.action_dim = action_dim
+            self.log_std_min = log_std_min
+            self.log_std_max = log_std_max
+
+            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
+            nn.init.orthogonal_(layers[0].weight, gain=math.sqrt(2))
+
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                linear_layer = nn.Linear(in_dim, out_dim)
+                nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
+                layers.extend([linear_layer, nn.ReLU()])
+
+            layers.append(nn.Linear(hidden_dims[-1], 2 * action_dim))
+            self.network = nn.Sequential(*layers)
+
+        def forward(
+            self, state: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            output = self.network(state)
+            mean, log_std = torch.split(output, self.action_dim, dim=-1)
+            log_std = torch.clamp(log_std, self.log_std_min, self.log_std_max)
+            return mean, log_std

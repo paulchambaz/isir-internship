@@ -65,7 +65,7 @@ def train(
                 progress.update(1)
 
                 if training_steps > warmup and training_steps % test_freq == 0:
-                    results = test(agent, test_env, 1)
+                    results = test(agent, test_env, 10)
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
                     progress.set_postfix({"eval": get_stats(results)})
