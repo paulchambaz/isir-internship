@@ -40,6 +40,8 @@ def main() -> None:
             stats = [compute_stats(results) for results in history.values()]
             mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
 
+            print(iqms)
+
             color = colors[color_idx % len(colors)]
 
             ax.plot(
@@ -55,7 +57,6 @@ def main() -> None:
     ax.set_ylabel("Episode Return")
     ax.legend()
     ax.grid(visible=True, alpha=0.25)
-    ax.set_ylim(bottom=0)
 
     Path("paper/figures").mkdir(exist_ok=True)
     plt.show()

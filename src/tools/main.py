@@ -202,7 +202,7 @@ def main() -> None:
         policy_lr=3e-4,
         temperature_lr=3e-4,
         tau=0.005,
-        rho=0.3,
+        rho=0.7,
         gamma=0.999,
         alpha=None,
     )
