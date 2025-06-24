@@ -5,6 +5,18 @@
 run:
   @uv run python -m tools.main --env mountaincar --steps 200000
 
+# Run main training script
+main *ARGS:
+  @uv run python -m tools.main {{ ARGS }}
+
+# Run training curve visualization script
+visualize *ARGS:
+  @uv run python -m tools.visualize {{ ARGS }}
+
+# Run critic and policy visualization script for mountaincar
+visualize-critic-policy *ARGS:
+  @uv run python -m tools.visualize_critic_policy {{ ARGS }}
+
 # Show available commands
 help:
   @just --list
