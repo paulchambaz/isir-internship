@@ -7,6 +7,7 @@
 # (at your option) any later version.
 
 import argparse
+import copy
 import pickle
 from pathlib import Path
 
@@ -69,20 +70,20 @@ def train(
                     results = test(agent, test_env, 10)
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
-                    agent_history[result_id] = agent.get_state()
+                    agent_history[result_id] = copy.deepcopy(agent.get_state())
                     progress.set_postfix({"eval": get_stats(results)})
 
                 if done or training_steps >= steps:
                     break
 
         final_evaluation = test(agent, test_env, 100)
-        _, q1, iqm, _, _ = compute_stats(final_evaluation)
+        _, _, iqm, _, _ = compute_stats(final_evaluation)
 
         print(get_stats(final_evaluation))
 
-        if q1 > best_iqm:
+        if iqm > best_iqm:
             best_iqm = iqm
-            best_agent_state = agent.get_state()
+            best_agent_state = copy.deepcopy(agent.get_state())
 
     agent.load_from_state(best_agent_state)
 

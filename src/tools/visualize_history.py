@@ -40,8 +40,6 @@ def main() -> None:
             stats = [compute_stats(results) for results in history.values()]
             mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
 
-            print(iqms)
-
             color = colors[color_idx % len(colors)]
 
             ax.plot(

@@ -10,8 +10,8 @@ main *ARGS:
   @uv run python -m tools.main {{ ARGS }}
 
 # Run training curve visualization script
-visualize *ARGS:
-  @uv run python -m tools.visualize {{ ARGS }}
+visualize-history *ARGS:
+  @uv run python -m tools.visualize_history {{ ARGS }}
 
 # Run critic and policy visualization script for mountaincar
 visualize-critic-policy *ARGS:
