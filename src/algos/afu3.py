@@ -237,13 +237,17 @@ class AFU:
         optim_advantages = -torch.stack(q_values[:-1])
 
         indicator = (
-            (optim_values + optim_advantages >= q_targets.unsqueeze(0))
+            (optim_values + optim_advantages < q_targets.unsqueeze(0))
             .detach()
             .float()
         )
-        upsilon_values = (1 - indicator) * (
-            ((1 - self.rho) * optim_values).detach() + self.rho * optim_values
-        ) + indicator * optim_values
+        upsilon_values = (
+            1 - self.rho * indicator
+        ) * optim_values + self.rho * indicator * optim_values.detach()
+
+        # upsilon_values = (1 - indicator) * (
+        #     ((1 - self.rho) * optim_values).detach() + self.rho * optim_values
+        # ) + indicator * optim_values
 
         target_diff = upsilon_values - q_targets.unsqueeze(0)
         z_values = torch.where(
@@ -266,8 +270,9 @@ class AFU:
         raw_action = normal.rsample()
         actions = torch.tanh(raw_action)
 
-        log_prob = normal.log_prob(raw_action)
-        log_prob -= torch.log(torch.relu(1 - actions.pow(2)) + 1e-6)
+        log_prob = normal.log_prob(raw_action) - torch.log(
+            torch.relu(1 - actions.pow(2)) + 1e-6
+        )
         log_probs = log_prob.sum(dim=-1, keepdim=True)
 
         q_values = self.q_network(states, actions)
