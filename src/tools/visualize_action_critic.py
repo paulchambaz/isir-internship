@@ -6,14 +6,15 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
-"""Package description"""
+import argparse
 
-__version__ = "0.1.0"
-__author__ = "Paul Chambaz"
+import algos
 
-from .afu import AFU
-from .afu_perrin import AFUPerrin
-from .sac import SAC
-from .simple_right import SimpleRight
 
-__all__ = ["AFU", "SAC", "AFUPerrin", "SimpleRight"]
+def main() -> None:
+    pass
+
+
+if __name__ == "__main__":
+    # parser = argparse.ArgumentParser(description)
+    main()

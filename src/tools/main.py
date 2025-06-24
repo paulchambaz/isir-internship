@@ -31,6 +31,7 @@ def train(
     count: int,
 ) -> tuple[algos.AFUPerrin, dict]:
     history = {}
+    agent_history = {}
 
     agent_state = agent.get_state()
     best_agent_state = agent_state
@@ -68,6 +69,7 @@ def train(
                     results = test(agent, test_env, 10)
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
+                    agent_history[result_id] = agent.get_state()
                     progress.set_postfix({"eval": get_stats(results)})
 
                 if done or training_steps >= steps:
@@ -84,7 +86,7 @@ def train(
 
     agent.load_from_state(best_agent_state)
 
-    return agent, history
+    return agent, history, agent_history
 
 
 def get_stats(data: list) -> str:
@@ -229,7 +231,7 @@ def main() -> None:
         for state, action, reward, next_state, done in expert_transitions:
             agent.push_buffer(state, action, reward, next_state, done)
 
-    trained_agent, history = train(
+    trained_agent, history, agent_history = train(
         agent=agent,
         train_env=train_env,
         test_env=test_env,
@@ -246,6 +248,8 @@ def main() -> None:
         pickle.dump(trained_agent.get_state(), f)
     with open("outputs/history.pk", "wb") as f:
         pickle.dump(history, f)
+    with open("outputs/agent_history.pk", "wb") as f:
+        pickle.dump(agent_history, f)
 
     train_env.close()
     test_env.close()
