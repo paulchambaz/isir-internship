@@ -178,21 +178,7 @@ def main() -> None:
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
 
-    agent = algos.SAC(
-        action_dim=train_env.action_space.shape[0],
-        state_dim=train_env.observation_space.shape[0],
-        hidden_dims=[256, 256],
-        replay_size=200_000,
-        batch_size=256,
-        critic_lr=3e-4,
-        policy_lr=3e-4,
-        temperature_lr=3e-4,
-        tau=0.005,
-        gamma=0.999,
-        alpha=None,
-    )
-
-    # agent = algos.AFU(
+    # agent = algos.SAC(
     #     action_dim=train_env.action_space.shape[0],
     #     state_dim=train_env.observation_space.shape[0],
     #     hidden_dims=[256, 256],
@@ -202,10 +188,24 @@ def main() -> None:
     #     policy_lr=3e-4,
     #     temperature_lr=3e-4,
     #     tau=0.005,
-    #     rho=0.3,
     #     gamma=0.999,
     #     alpha=None,
     # )
+
+    agent = algos.AFU(
+        action_dim=train_env.action_space.shape[0],
+        state_dim=train_env.observation_space.shape[0],
+        hidden_dims=[256, 256],
+        replay_size=200_000,
+        batch_size=256,
+        critic_lr=3e-4,
+        policy_lr=3e-4,
+        temperature_lr=3e-4,
+        tau=0.005,
+        rho=0.3,
+        gamma=0.999,
+        alpha=None,
+    )
 
     # agent = algos.AFUPerrin(
     #     action_dim=train_env.action_space.shape[0],
