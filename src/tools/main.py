@@ -240,7 +240,7 @@ def main() -> None:
         warmup=10000,
         train_freq=32,
         gradient_steps=32,
-        test_freq=1000,
+        test_freq=50,
         count=args.runs,
     )
 

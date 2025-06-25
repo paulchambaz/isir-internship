@@ -36,7 +36,7 @@ def main() -> None:
             with open(file_path, "rb") as f:
                 history = pickle.load(f)  # noqa: S301
 
-            steps = [k * 1000 for k in history]
+            steps = [k * 50 for k in history]
             stats = [compute_stats(results) for results in history.values()]
             mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
 
