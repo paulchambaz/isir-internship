@@ -7,6 +7,7 @@
 # (at your option) any later version.
 
 import argparse
+import gc
 import pickle
 from pathlib import Path
 
@@ -30,7 +31,7 @@ MAX_3 = 0
 MIN_3 = 0
 
 
-def get_figure(i, state_dict, position, velocity):
+def get_figure(i, state_dict, position, velocity) -> None:
     global MAX_1, MIN_1, MAX_2, MIN_2, MAX_3, MIN_3
 
     state_dim = 2
@@ -202,6 +203,26 @@ def get_figure(i, state_dict, position, velocity):
     plt.close()
 
 
+def load_full_agent_history(directory: str) -> None:
+    full_agent_history = {}
+
+    checkpoint_files = sorted(
+        Path(directory).glob("agent_history_*.pk"),
+        key=lambda x: int(x.stem.split("_")[-1]),
+    )
+
+    for checkpoint_file in checkpoint_files:
+        with open(checkpoint_file, "rb") as f:
+            partial_history = pickle.load(f)  # noqa: S301
+
+        full_agent_history.update(partial_history)
+
+        del partial_history
+        gc.collect()
+
+    return full_agent_history
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Visualize agent (a, Q(s, a)) for a given state"
@@ -223,8 +244,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    with open(args.file, "rb") as f:
-        state_history = pickle.load(f)  # noqa: S301
+    state_history = load_full_agent_history(args.file)
 
     for i, state_dict in tqdm(state_history.items()):
         # if i == max(state_history.keys()):
