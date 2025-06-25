@@ -27,6 +27,7 @@
             python313Packages.tkinter
             texlive.combined.scheme-full
             mujoco
+            imagemagick
           ];
 
           env = with pkgs; {
