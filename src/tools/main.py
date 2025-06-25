@@ -76,7 +76,7 @@ def train(
                 if done or training_steps >= steps:
                     break
 
-        final_evaluation = test(agent, test_env, 100)
+        final_evaluation = test(agent, test_env, 20)
         _, _, iqm, _, _ = compute_stats(final_evaluation)
 
         print(get_stats(final_evaluation))
@@ -240,7 +240,7 @@ def main() -> None:
         warmup=10000,
         train_freq=32,
         gradient_steps=32,
-        test_freq=50,
+        test_freq=100,
         count=args.runs,
     )
 

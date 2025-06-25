@@ -45,11 +45,18 @@ def get_figure(i, state_dict, position, velocity):
     v_net = algos.AFU.VNetwork(state_dim, hidden_dims, num_critics=2)
     v_net.load_state_dict(state_dict["v_network"])
 
+    policy_net = algos.AFU.PolicyNetwork(
+        state_dim, action_dim, hidden_dims, log_std_min=10.0, log_std_max=2.0
+    )
+    policy_net.load_state_dict(state_dict["policy_network"])
+
     state = torch.tensor([[position, velocity]], dtype=torch.float32)
 
     with torch.no_grad():
         v_values_list = v_net(state)
         v_value = float(torch.min(torch.stack(v_values_list), dim=0)[0])
+        mean, log_std = policy_net(state)
+        policy_action = float(torch.tanh(mean).squeeze())
 
     n_actions = 100
     actions = np.linspace(ACTION_MIN, ACTION_MAX, n_actions)
@@ -60,6 +67,9 @@ def get_figure(i, state_dict, position, velocity):
         q_values_list = q_net(states_batch, actions_tensor)
         a_values = -(q_values_list[0] + q_values_list[1]).squeeze().numpy() / 2
         q_values = q_values_list[2].squeeze().numpy()
+
+    mode_action_idx = np.argmax(q_values)
+    mode_action = actions[mode_action_idx]
 
     plt.rcParams["font.size"] = 20
     plt.rcParams["text.usetex"] = True
@@ -118,8 +128,11 @@ def get_figure(i, state_dict, position, velocity):
             MIN_3 * (1 - lerp_factor) + target_min_3 * lerp_factor, target_min_3
         )
 
-    fig = plt.figure(figsize=(10, 6))
+    fig = plt.figure(figsize=(14, 8))
     gs = fig.add_gridspec(2, 2, width_ratios=[2, 1], height_ratios=[1, 1])
+    plt.subplots_adjust(
+        left=0.08, right=0.95, top=0.92, bottom=0.1, wspace=0.3, hspace=0.3
+    )
 
     ax1 = fig.add_subplot(gs[:, 0])
     ax2 = fig.add_subplot(gs[0, 1])
@@ -133,16 +146,34 @@ def get_figure(i, state_dict, position, velocity):
     axes[0].plot([], [], color=COLORS[1], linewidth=2, label=r"V(s)")
     axes[0].plot([], [], color=COLORS[2], linewidth=2, label=r"V(s) + A(s, a)")
     axes[0].plot([], [], color=COLORS[4], linewidth=2, label=r"$A(s,a)$")
+    axes[0].scatter(
+        [mode_action],
+        [MIN_1 + (MAX_1 - MIN_1) * 0.02],
+        color=COLORS[5],
+        s=100,
+        zorder=5,
+        label=r"$a_Q^*(s)$",
+    )
+    axes[0].scatter(
+        [policy_action],
+        [MIN_1 + (MAX_1 - MIN_1) * 0.02],
+        color=COLORS[3],
+        s=100,
+        zorder=5,
+        label=r"$\pi(s)$",
+    )
     axes[0].set_xlabel("Action")
     axes[0].set_ylabel(r"$Q(s, a)$")
     axes[0].set_title("Q-values")
     axes[0].grid(visible=True, alpha=0.25)
-    axes[0].legend(loc="lower right")
+    axes[0].legend(loc="upper left")
     axes[0].set_ylim(MIN_1, MAX_1)
 
     axes[1].plot(actions, q_values, color=COLORS[0], linewidth=4)
     axes[1].axhline(y=v_value, color=COLORS[1], linewidth=2)
     axes[1].plot(actions, v_value + a_values, color=COLORS[2], linewidth=2)
+    axes[1].scatter([mode_action], [MIN_2], color=COLORS[5], s=100, zorder=5)
+    axes[1].scatter([policy_action], [MIN_2], color=COLORS[3], s=100, zorder=5)
     axes[1].set_xlabel("Action")
     axes[1].set_ylabel("Value")
     axes[1].set_title("Q = V + A")
@@ -151,6 +182,8 @@ def get_figure(i, state_dict, position, velocity):
 
     axes[2].plot(actions, a_values, color=COLORS[4], linewidth=2)
     axes[2].axhline(y=0, color="k", linestyle="-", alpha=0.3)
+    axes[2].scatter([mode_action], [MIN_3], color=COLORS[5], s=100, zorder=5)
+    axes[2].scatter([policy_action], [MIN_3], color=COLORS[3], s=100, zorder=5)
     axes[2].set_xlabel("Action")
     axes[2].set_ylabel(r"$A(s, a)$")
     axes[2].set_title("Advantage")
