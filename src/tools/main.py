@@ -66,7 +66,7 @@ def train(
                 training_steps += 1
                 progress.update(1)
 
-                if training_steps > warmup and training_steps % test_freq == 0:
+                if training_steps % test_freq == 0:
                     results = test(agent, test_env, 10)
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
@@ -228,7 +228,7 @@ def main() -> None:
     # )
 
     if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=20)
+        expert_transitions = expert_mountaincar(train_env, count=10)
         for state, action, reward, next_state, done in expert_transitions:
             agent.push_buffer(state, action, reward, next_state, done)
 
