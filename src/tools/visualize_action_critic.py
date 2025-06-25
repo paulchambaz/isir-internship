@@ -157,7 +157,7 @@ def get_figure(i, state_dict, position, velocity):
     axes[2].grid(visible=True, alpha=0.25)
     axes[2].set_ylim(MIN_3, max(0, MAX_3))
 
-    path = "paper/figures/mountaincar_action_critic"
+    path = "outputs/mountaincar_action_critic"
     Path(path).mkdir(exist_ok=True)
     plt.suptitle(f"{i * 1000} steps - state: [{position}, {velocity}]")
     plt.tight_layout()

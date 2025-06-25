@@ -331,7 +331,7 @@ def display_visualization(
                 linewidths=0.6,
             )
 
-    path = f"paper/figures/{algorithm}_mountaincar_critic_policy"
+    path = f"outputs/{algorithm}_mountaincar_critic_policy"
     Path(path).mkdir(exist_ok=True)
     plt.tight_layout()
     plt.savefig(
