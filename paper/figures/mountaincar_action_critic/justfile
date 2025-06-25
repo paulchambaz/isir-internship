@@ -1,0 +1,7 @@
+makegif:
+  for i in *.png; do \
+    if [[ $i != scaled_* ]]; then \
+      magick "$i" -resize 1920x1080 "scaled_$i"; \
+    fi \
+  done
+  magick scaled_*.png output.gif

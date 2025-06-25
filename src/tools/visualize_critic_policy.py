@@ -14,6 +14,7 @@ import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from scipy.spatial import ConvexHull
 from tqdm import tqdm
 
 import algos
@@ -79,6 +80,67 @@ def measure_trajectories(policy_net, n_episodes):
     return avg_trajectory
 
 
+def measure_max_q_values(algorithm, q_net, v_net, policy_net, grid_size):
+    positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
+    velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
+
+    max_q_values = np.zeros((grid_size, grid_size))
+
+    for i, pos in enumerate(positions):
+        for j, vel in enumerate(velocities):
+            state = torch.tensor([[pos, vel]], dtype=torch.float32)
+
+            n_actions = 50
+            actions_batch = torch.linspace(
+                ACTION_MIN, ACTION_MAX, n_actions
+            ).unsqueeze(1)
+            states_batch = state.expand(n_actions, -1)
+
+            if algorithm == "sac":
+                q1_values = q_net[0](states_batch, actions_batch)
+                q2_values = q_net[1](states_batch, actions_batch)
+                q_values = torch.min(q1_values, q2_values)
+            else:  # afu
+                q_values_list = q_net(states_batch, actions_batch)
+                q_values = q_values_list[-1]
+
+            max_q_value = float(torch.max(q_values))
+            max_q_values[j, i] = max_q_value
+
+    return max_q_values
+
+
+def measure_v_plus_max_a(q_net, v_net, grid_size):
+    positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
+    velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
+
+    v_plus_max_a = np.zeros((grid_size, grid_size))
+
+    for i, pos in enumerate(positions):
+        for j, vel in enumerate(velocities):
+            state = torch.tensor([[pos, vel]], dtype=torch.float32)
+
+            with torch.no_grad():
+                v_values_list = v_net(state)
+                v_value = float(torch.min(torch.stack(v_values_list), dim=0)[0])
+
+            n_actions = 50
+            actions_batch = torch.linspace(
+                ACTION_MIN, ACTION_MAX, n_actions
+            ).unsqueeze(1)
+            states_batch = state.expand(n_actions, -1)
+
+            with torch.no_grad():
+                q_values_list = q_net(states_batch, actions_batch)
+                q_values = q_values_list[-1]  # Use the final Q network
+                max_q = float(torch.max(q_values))
+                max_a = max_q - v_value
+
+            v_plus_max_a[j, i] = v_value + max_a
+
+    return v_plus_max_a
+
+
 def measure_v_values(algorithm, q1_net, q2_net, v_net, grid_size):
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
@@ -131,53 +193,154 @@ def measure_actions(policy_net, grid_size):
     return actions
 
 
-def display_visualization(i, algorithm, v_values, actions, avg_trajectories):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+def get_replay_buffer_convex_hull(replay_positions, replay_velocities):
+    points = np.column_stack((replay_positions, replay_velocities))
+
+    hull = ConvexHull(points)
+    hull_points = points[hull.vertices]
+    hull_points = np.vstack([hull_points, hull_points[0]])
+
+    return hull_points[:, 0], hull_points[:, 1]
+
+
+def extract_replay_buffer_states(state_dict):
+    replay_data = state_dict["replay_buffer"]
+    states = np.array([transition[0] for transition in replay_data])
+    positions = states[:, 0]
+    velocities = states[:, 1]
+    return positions, velocities
+
+
+def display_visualization(
+    i,
+    algorithm,
+    v_values,
+    actions,
+    max_q_values,
+    v_plus_max_a_values,
+    avg_trajectories,
+    replay_positions,
+    replay_velocities,
+    hull_pos,
+    hull_vel,
+):
+    fig, axes = plt.subplots(2, 3, figsize=(22, 12))
+    axes = axes.flatten()
     extent = [POSITION_MIN, POSITION_MAX, VELOCITY_MIN, VELOCITY_MAX]
-    im1 = ax1.imshow(
+
+    all_values = np.concatenate(
+        [
+            v_values.flatten(),
+            max_q_values.flatten(),
+            v_plus_max_a_values.flatten(),
+        ]
+    )
+    vmin_shared = np.min(all_values)
+    vmax_shared = np.max(all_values)
+
+    im1 = axes[0].imshow(
         v_values,
         extent=extent,
         aspect="auto",
         origin="lower",
         cmap="viridis",
+        vmin=vmin_shared,
+        vmax=vmax_shared,
     )
-    ax1.set_title(rf"Value function $V(s)$ - {algorithm.upper()}")
-    ax1.set_xlabel("Position")
-    ax1.set_ylabel("Velocity")
-    plt.colorbar(im1, ax=ax1)
+    axes[0].set_title(rf"$V(s)$ - {algorithm.upper()}")
+    axes[0].set_xlabel("Position")
+    axes[0].set_ylabel("Velocity")
+    plt.colorbar(im1, ax=axes[0])
 
-    im2 = ax2.imshow(
+    im2 = axes[1].imshow(
+        v_values - max_q_values,
+        extent=extent,
+        aspect="auto",
+        origin="lower",
+        cmap="viridis",
+    )
+    axes[1].set_title(rf"$V(s) - \max_a Q(s,a)$ - {algorithm.upper()}")
+    axes[1].set_xlabel("Position")
+    axes[1].set_ylabel("Velocity")
+    plt.colorbar(im2, ax=axes[1])
+
+    im3 = axes[2].imshow(
+        v_values - v_plus_max_a_values,
+        extent=extent,
+        aspect="auto",
+        origin="lower",
+        cmap="viridis",
+    )
+    axes[2].set_title(rf"$\max_a A(s,a)$ - {algorithm.upper()}")
+    axes[2].set_xlabel("Position")
+    axes[2].set_ylabel("Velocity")
+    plt.colorbar(im3, ax=axes[2])
+
+    im4 = axes[3].imshow(
         actions,
         extent=extent,
         aspect="auto",
         origin="lower",
-        cmap="hot",
+        cmap="inferno",
         vmin=-1,
         vmax=1,
     )
-    ax2.set_title(rf"Policy actions $\pi(s)$ - {algorithm.upper()}")
-    ax2.set_xlabel("Position")
-    ax2.set_ylabel("Velocity")
-    plt.colorbar(im2, ax=ax2)
+    axes[3].set_title(rf"$\pi(s)$ - {algorithm.upper()}")
+    axes[3].set_xlabel("Position")
+    axes[3].set_ylabel("Velocity")
+    plt.colorbar(im4, ax=axes[3])
 
-    ax1.axvline(x=GOAL_POSITION, color="black", linestyle="--", linewidth=1)
-    ax2.axvline(x=GOAL_POSITION, color="#3498db", linestyle="--", linewidth=1)
+    axes[4].set_xlim(POSITION_MIN, POSITION_MAX)
+    axes[4].set_ylim(VELOCITY_MIN, VELOCITY_MAX)
+    axes[4].set_title(rf"Replay Buffer - {algorithm.upper()}")
+    axes[4].set_xlabel("Position")
+    axes[4].set_ylabel("Velocity")
+
+    colors = np.arange(len(replay_positions))
+    scatter = axes[4].scatter(
+        replay_positions,
+        replay_velocities,
+        c=colors,
+        cmap="magma",
+        s=1,
+        alpha=0.7,
+    )
+    plt.colorbar(scatter, ax=axes[4], label="Recency")
+
+    axes[5].axis("off")
+
+    for j in range(5):
+        axes[j].axvline(
+            x=GOAL_POSITION, color="black", linestyle="--", linewidth=1
+        )
+
+    for j in range(3):
+        axes[j].plot(hull_pos, hull_vel, "k--", linewidth=1)
 
     if len(avg_trajectories) > 1:
         avg_trajectory = np.array(avg_trajectories)
         positions_avg = avg_trajectory[::2, 0]
         velocities_avg = avg_trajectory[::2, 1]
-        ax1.scatter(positions_avg, velocities_avg, c="black", s=4)
-        ax2.scatter(positions_avg, velocities_avg, c="#3498db", s=4)
+        for j in range(4):
+            axes[j].scatter(
+                positions_avg,
+                velocities_avg,
+                c="white",
+                s=10,
+                edgecolors="black",
+                linewidths=0.6,
+            )
 
     path = f"paper/figures/{algorithm}_mountaincar_critic_policy"
     Path(path).mkdir(exist_ok=True)
+    plt.tight_layout()
     plt.savefig(
-        f"{path}/{i}.png",
+        f"{path}/{i:05d}.png",
         bbox_inches="tight",
         pad_inches=0,
         dpi=300,
     )
+    plt.close()
 
 
 def get_figure(i, state_dict, algorithm):
@@ -197,9 +360,13 @@ def get_figure(i, state_dict, algorithm):
             q2_net.load_state_dict(state_dict["q2"])
             policy_net.load_state_dict(state_dict["policy"])
         case "afu":
-            q1_net = None
-            q2_net = None
+            q_net = algos.AFU.QNetwork(
+                state_dim, action_dim, hidden_dims, num_critics=3
+            )
+            q_net.load_state_dict(state_dict["q_network"])
+            q_nets = q_net
             v_net = algos.AFU.VNetwork(state_dim, hidden_dims, num_critics=2)
+            v_net.load_state_dict(state_dict["v_network"])
             policy_net = algos.AFU.PolicyNetwork(
                 state_dim,
                 action_dim,
@@ -207,27 +374,47 @@ def get_figure(i, state_dict, algorithm):
                 log_std_min=-10.0,
                 log_std_max=2.0,
             )
-
-            v_net.load_state_dict(state_dict["v_network"])
             policy_net.load_state_dict(state_dict["policy_network"])
 
     grid_size = 50
-
     avg_trajectory = measure_trajectories(policy_net, 3)
 
     match algorithm:
         case "sac":
             v_values = measure_v_values("sac", q1_net, q2_net, v_net, grid_size)
         case "afu":
-            v_values = measure_v_values("afu", q1_net, q2_net, v_net, grid_size)
+            v_values = measure_v_values("afu", None, None, v_net, grid_size)
+            max_q_values = measure_max_q_values(
+                "afu", q_nets, v_net, policy_net, grid_size
+            )
+            v_plus_max_a_values = measure_v_plus_max_a(q_nets, v_net, grid_size)
 
     actions = measure_actions(policy_net, grid_size)
+
+    replay_positions, replay_velocities = extract_replay_buffer_states(
+        state_dict
+    )
+    hull_pos, hull_vel = get_replay_buffer_convex_hull(
+        replay_positions, replay_velocities
+    )
 
     plt.rcParams["font.size"] = 20
     plt.rcParams["text.usetex"] = True
     plt.rcParams["font.family"] = "serif"
 
-    display_visualization(i, algorithm, v_values, actions, avg_trajectory)
+    display_visualization(
+        i,
+        algorithm,
+        v_values,
+        actions,
+        max_q_values,
+        v_plus_max_a_values,
+        avg_trajectory,
+        replay_positions,
+        replay_velocities,
+        hull_pos,
+        hull_vel,
+    )
 
 
 def main() -> None:

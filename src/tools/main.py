@@ -21,7 +21,7 @@ from .utils import compute_stats
 
 
 def train(
-    agent: algos.AFUPerrin,
+    agent: algos.AFU,
     train_env: gym.Env,
     test_env: gym.Env,
     steps: int,
@@ -30,7 +30,7 @@ def train(
     gradient_steps: int,
     test_freq: int,
     count: int,
-) -> tuple[algos.AFUPerrin, dict]:
+) -> tuple[algos.AFU, dict]:
     history = {}
     agent_history = {}
 

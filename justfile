@@ -17,6 +17,10 @@ visualize-history *ARGS:
 visualize-critic-policy *ARGS:
   @uv run python -m tools.visualize_critic_policy {{ ARGS }}
 
+# Run action-critic visualization script for mountaincar
+visualize-action-critic *ARGS:
+  @uv run python -m tools.visualize_action_critic {{ ARGS }}
+
 # Show available commands
 help:
   @just --list
