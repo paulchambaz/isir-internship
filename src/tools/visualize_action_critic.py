@@ -208,7 +208,6 @@ def load_full_agent_history(directory: str) -> None:
 
     checkpoint_files = sorted(
         Path(directory).glob("agent_history_*.pk"),
-        key=lambda x: int(x.stem.split("_")[-1]),
     )
 
     for checkpoint_file in checkpoint_files:
