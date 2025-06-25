@@ -243,11 +243,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    state_history = load_full_agent_history(args.file)
+    checkpoint_files = sorted(Path(args.file).glob("agent_history_*.pk"))
+    total_states = len(checkpoint_files) * 100
 
-    for i, state_dict in tqdm(state_history.items()):
-        # if i == max(state_history.keys()):
-        get_figure(i, state_dict, args.position, args.velocity)
+    with tqdm(total=total_states) as pbar:
+        for checkpoint_file in checkpoint_files:
+            with open(checkpoint_file, "rb") as f:
+                partial_history = pickle.load(f)  # noqa: S301
+
+            for i, state_dict in partial_history.items():
+                get_figure(i, state_dict, args.position, args.velocity)
+                pbar.update(1)
+
+            del partial_history
+            gc.collect()
 
 
 if __name__ == "__main__":

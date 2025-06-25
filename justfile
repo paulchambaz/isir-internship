@@ -3,11 +3,11 @@
 
 # Run the main program
 run:
-  @uv run python -m tools.main --env mountaincar --steps 200000
+  @uv run python -m tools.train --env mountaincar --steps 200000
 
 # Run main training script
-main *ARGS:
-  @uv run python -m tools.main {{ ARGS }}
+train *ARGS:
+  @uv run python -m tools.train {{ ARGS }}
 
 # Run training curve visualization script
 visualize-history *ARGS:
@@ -20,6 +20,10 @@ visualize-critic-policy *ARGS:
 # Run action-critic visualization script for mountaincar
 visualize-action-critic *ARGS:
   @uv run python -m tools.visualize_action_critic {{ ARGS }}
+
+# Compute monte carlo for each step of the learning history of an agent
+compute-monte-carlo *ARGS:
+  @uv run python -m tools.compute_monte_carlo {{ ARGS }}
 
 # Show available commands
 help:
