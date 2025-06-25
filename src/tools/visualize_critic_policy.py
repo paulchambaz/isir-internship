@@ -110,19 +110,15 @@ def measure_max_q_values(algorithm, q_net, v_net, policy_net, grid_size):
     return max_q_values
 
 
-def measure_v_plus_max_a(q_net, v_net, grid_size):
+def measure_max_a(q_net, grid_size):
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
 
-    v_plus_max_a = np.zeros((grid_size, grid_size))
+    max_a_values = np.zeros((grid_size, grid_size))
 
     for i, pos in enumerate(positions):
         for j, vel in enumerate(velocities):
             state = torch.tensor([[pos, vel]], dtype=torch.float32)
-
-            with torch.no_grad():
-                v_values_list = v_net(state)
-                v_value = float(torch.min(torch.stack(v_values_list), dim=0)[0])
 
             n_actions = 50
             actions_batch = torch.linspace(
@@ -130,15 +126,13 @@ def measure_v_plus_max_a(q_net, v_net, grid_size):
             ).unsqueeze(1)
             states_batch = state.expand(n_actions, -1)
 
-            with torch.no_grad():
-                q_values_list = q_net(states_batch, actions_batch)
-                q_values = q_values_list[-1]  # Use the final Q network
-                max_q = float(torch.max(q_values))
-                max_a = max_q - v_value
+            q_values_list = q_net(states_batch, actions_batch)
+            a_values = -(q_values_list[0] + q_values_list[1]) / 2
+            max_a = float(torch.max(a_values))
 
-            v_plus_max_a[j, i] = v_value + max_a
+            max_a_values[j, i] = max_a
 
-    return v_plus_max_a
+    return max_a_values
 
 
 def measure_v_values(algorithm, q1_net, q2_net, v_net, grid_size):
@@ -217,7 +211,7 @@ def display_visualization(
     v_values,
     actions,
     max_q_values,
-    v_plus_max_a_values,
+    max_a_values,
     avg_trajectories,
     replay_positions,
     replay_velocities,
@@ -228,15 +222,26 @@ def display_visualization(
     axes = axes.flatten()
     extent = [POSITION_MIN, POSITION_MAX, VELOCITY_MIN, VELOCITY_MAX]
 
-    all_values = np.concatenate(
+    v_all_values = np.concatenate(
         [
             v_values.flatten(),
             max_q_values.flatten(),
-            v_plus_max_a_values.flatten(),
+            (v_values + max_a_values).flatten(),
         ]
     )
-    vmin_shared = np.min(all_values)
-    vmax_shared = np.max(all_values)
+    vmin_shared = np.min(v_all_values)
+    vmax_shared = np.max(v_all_values)
+
+    q_all_values = np.concatenate(
+        [
+            (v_values - max_q_values).flatten(),
+            (v_values - max_q_values + max_a_values).flatten(),
+        ]
+    )
+    qmin_shared = np.min(q_all_values)
+    qmax_shared = np.max(q_all_values)
+
+    qabsolute = max(-qmin_shared, qmax_shared)
 
     im1 = axes[0].imshow(
         v_values,
@@ -257,7 +262,9 @@ def display_visualization(
         extent=extent,
         aspect="auto",
         origin="lower",
-        cmap="viridis",
+        cmap="RdBu",
+        vmin=-qabsolute,
+        vmax=qabsolute,
     )
     axes[1].set_title(rf"$V(s) - \max_a Q(s,a)$ - {algorithm.upper()}")
     axes[1].set_xlabel("Position")
@@ -265,13 +272,17 @@ def display_visualization(
     plt.colorbar(im2, ax=axes[1])
 
     im3 = axes[2].imshow(
-        v_values - v_plus_max_a_values,
+        v_values - max_q_values + max_a_values,
         extent=extent,
         aspect="auto",
         origin="lower",
-        cmap="viridis",
+        cmap="RdBu",
+        vmin=-qabsolute,
+        vmax=qabsolute,
     )
-    axes[2].set_title(rf"$\max_a A(s,a)$ - {algorithm.upper()}")
+    axes[2].set_title(
+        rf"$V(s) - \max_a Q(s, a) + \max_a A(s,a)$ - {algorithm.upper()}"
+    )
     axes[2].set_xlabel("Position")
     axes[2].set_ylabel("Velocity")
     plt.colorbar(im3, ax=axes[2])
@@ -387,7 +398,7 @@ def get_figure(i, state_dict, algorithm):
             max_q_values = measure_max_q_values(
                 "afu", q_nets, v_net, policy_net, grid_size
             )
-            v_plus_max_a_values = measure_v_plus_max_a(q_nets, v_net, grid_size)
+            max_a_values = measure_max_a(q_nets, grid_size)
 
     actions = measure_actions(policy_net, grid_size)
 
@@ -408,7 +419,7 @@ def get_figure(i, state_dict, algorithm):
         v_values,
         actions,
         max_q_values,
-        v_plus_max_a_values,
+        max_a_values,
         avg_trajectory,
         replay_positions,
         replay_velocities,
@@ -436,6 +447,7 @@ def main() -> None:
         state_history = pickle.load(f)  # noqa: S301
 
     for i, state_dict in tqdm(state_history.items()):
+        # if i == max(state_history.keys()):
         get_figure(i, state_dict, args.algorithm)
 
 
