@@ -8,6 +8,7 @@
 
 import argparse
 import copy
+import gc
 import pickle
 from pathlib import Path
 
@@ -40,6 +41,7 @@ def train(
 
     for i in range(count):
         training_steps = 0
+        checkpoint_counter = 0
 
         agent.load_from_state(agent_state)
 
@@ -70,8 +72,18 @@ def train(
                     results = test(agent, test_env, 10)
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
-                    agent_history[result_id] = copy.deepcopy(agent.get_state())
                     progress.set_postfix({"eval": get_stats(results)})
+                    agent_history[result_id] = copy.deepcopy(agent.get_state())
+
+                    if result_id % 100 == 0:
+                        with open(
+                            f"outputs/agent_history_{checkpoint_counter}.pk",
+                            "wb",
+                        ) as f:
+                            pickle.dump(agent_history, f)
+                        agent_history = {}
+                        gc.collect()
+                        checkpoint_counter += 1
 
                 if done or training_steps >= steps:
                     break
@@ -232,6 +244,8 @@ def main() -> None:
         for state, action, reward, next_state, done in expert_transitions:
             agent.push_buffer(state, action, reward, next_state, done)
 
+    Path("outputs").mkdir(exist_ok=True)
+
     trained_agent, history, agent_history = train(
         agent=agent,
         train_env=train_env,
@@ -240,17 +254,16 @@ def main() -> None:
         warmup=10000,
         train_freq=32,
         gradient_steps=32,
-        test_freq=100,
+        test_freq=50,
         count=args.runs,
     )
 
-    Path("outputs").mkdir(exist_ok=True)
     with open("outputs/agent.pt", "wb") as f:
         pickle.dump(trained_agent.get_state(), f)
     with open("outputs/history.pk", "wb") as f:
         pickle.dump(history, f)
-    with open("outputs/agent_history.pk", "wb") as f:
-        pickle.dump(agent_history, f)
+    # with open("outputs/agent_history.pk", "wb") as f:
+    #     pickle.dump(agent_history, f)
 
     train_env.close()
     test_env.close()
