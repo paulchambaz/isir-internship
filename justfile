@@ -25,6 +25,10 @@ visualize-action-critic *ARGS:
 compute-monte-carlo *ARGS:
   @uv run python -m tools.compute_monte_carlo {{ ARGS }}
 
+
+compute-tqc-figure *ARGS:
+  @uv run python -m tools.compute_tqc_figure {{ ARGS }}
+
 # Show available commands
 help:
   @just --list
@@ -67,4 +71,6 @@ reset: clean
 
 # Used to make gif out of images
 makegif:
-  find . -maxdepth 1 ! -name "scaled_*" -regex '^\./[0-9]+\.png$' -exec sh -c 'magick "$1" -resize 1920x1080 "scaled_$(basename "$1")"' _ {} \; && magick scaled_*.png output.gif
+  find . -maxdepth 1 ! -name "scaled_*" -regex '^\./[0-9]+\.png$' -exec sh -c 'magick "$1" -resize 1280x720 "scaled_$(basename "$1")"' _ {} \; && magick -limit memory 16GB -limit map 32GB scaled_*.png output.gif
+
+
