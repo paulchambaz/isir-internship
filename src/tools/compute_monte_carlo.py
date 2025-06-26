@@ -41,6 +41,7 @@ def run_monte_carlo_trajectory(
     discount = 1.0
     step = 0
 
+    _, _ = env.reset()
     state = np.array([start_position, start_velocity], dtype=np.float32)
 
     while step < max_steps:
