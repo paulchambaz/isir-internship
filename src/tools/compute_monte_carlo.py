@@ -45,7 +45,7 @@ def run_monte_carlo_trajectory(
     state = np.array([start_position, start_velocity], dtype=np.float32)
 
     while step < max_steps:
-        state_tensor = torch.tensor([state], dtype=torch.float32)
+        state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
 
         with torch.no_grad():
             mean, log_std = policy_net(state_tensor)
@@ -101,9 +101,9 @@ def compute_mc_values_grid(
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
 
-    for _, pos in enumerate(positions):
+    for _, pos in tqdm(enumerate(positions)):
         mc_values[pos] = {}
-        for _, vel in enumerate(velocities):
+        for _, vel in tqdm(enumerate(velocities)):
             mc_values[pos][vel] = compute_mc_qvalue(
                 policy_net, pos, vel, n_trajectories, max_steps, gamma
             )
