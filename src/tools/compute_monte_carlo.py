@@ -9,11 +9,13 @@
 import argparse
 import gc
 import pickle
+from itertools import product
 from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
 import torch
+from torch import nn
 from tqdm import tqdm
 
 import algos
@@ -26,32 +28,31 @@ GOAL_POSITION = 0.45
 
 
 def run_monte_carlo_trajectory(
-    policy_net,
+    policy_net: nn.Module,
     start_position: float,
     start_velocity: float,
     max_steps: int,
     gamma: float,
 ) -> float:
     env = gym.make("MountainCarContinuous-v0")
+    _, _ = env.reset()
     env.unwrapped.state = np.array(
         [start_position, start_velocity], dtype=np.float32
     )
 
     total_return = 0.0
     discount = 1.0
-    step = 0
 
-    _, _ = env.reset()
     state = np.array([start_position, start_velocity], dtype=np.float32)
 
-    while step < max_steps:
+    for _ in range(max_steps):
         state_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
 
         with torch.no_grad():
             mean, log_std = policy_net(state_tensor)
-            std = log_std.exp()
-            normal = torch.distributions.Normal(mean, std)
-            raw_action = normal.rsample()
+            raw_action = torch.distributions.Normal(
+                mean, log_std.exp()
+            ).rsample()
             action = torch.tanh(raw_action).squeeze(0).numpy()
 
         next_state, reward, terminated, truncated, _ = env.step(action)
@@ -61,7 +62,6 @@ def run_monte_carlo_trajectory(
         discount *= gamma
 
         state = next_state
-        step += 1
 
         if done:
             break
@@ -72,7 +72,7 @@ def run_monte_carlo_trajectory(
 
 
 def compute_mc_qvalue(
-    policy_net,
+    policy_net: nn.Module,
     position: float,
     velocity: float,
     n_trajectories: int,
@@ -90,34 +90,31 @@ def compute_mc_qvalue(
 
 
 def compute_mc_values_grid(
-    policy_net,
+    policy_net: nn.Module,
     grid_size: int,
     n_trajectories: int,
     max_steps: int,
     gamma: float,
-):
+) -> dict:
     mc_values = {}
-
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
 
-    for _, pos in tqdm(enumerate(positions)):
-        mc_values[pos] = {}
-        for _, vel in tqdm(enumerate(velocities)):
-            mc_values[pos][vel] = compute_mc_qvalue(
-                policy_net, pos, vel, n_trajectories, max_steps, gamma
-            )
+    for pos, vel in tqdm(product(positions, velocities)):
+        mc_values.setdefault(pos, {})[vel] = compute_mc_qvalue(
+            policy_net, pos, vel, n_trajectories, max_steps, gamma
+        )
 
     return mc_values
 
 
-def load_policy_from_state(state_dict: dict):
-    state_dim = 2
-    action_dim = 1
-    hidden_dims = [256, 256]
-
+def load_policy_from_state(state_dict: dict) -> nn.Module:
     policy_net = algos.AFU.PolicyNetwork(
-        state_dim, action_dim, hidden_dims, log_std_min=-10.0, log_std_max=2.0
+        state_dim=2,
+        action_dim=1,
+        hidden_dims=[256, 256],
+        log_std_min=-10.0,
+        log_std_max=2.0,
     )
     policy_net.load_state_dict(state_dict["policy_network"])
 

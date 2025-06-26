@@ -193,7 +193,7 @@ def get_figure(i, state_dict, position, velocity) -> None:
 
     path = "outputs/mountaincar_action_critic"
     Path(path).mkdir(exist_ok=True)
-    plt.suptitle(f"{i * 1000} steps - state: [{position}, {velocity}]")
+    plt.suptitle(f"{i * 50} steps - state: [{position}, {velocity}]")
     plt.tight_layout()
     plt.savefig(
         f"{path}/{i:05d}.png",

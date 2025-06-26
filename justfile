@@ -64,3 +64,7 @@ clean:
 reset: clean
   @rm -rf .venv
   @uv sync --dev
+
+# Used to make gif out of images
+makegif:
+  find . -maxdepth 1 ! -name "scaled_*" -regex '^\./[0-9]+\.png$' -exec sh -c 'magick "$1" -resize 1920x1080 "scaled_$(basename "$1")"' _ {} \; && magick scaled_*.png output.gif
