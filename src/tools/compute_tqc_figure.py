@@ -186,13 +186,14 @@ def train_tqc_method(
     actions, rewards = dataset
     num_quantiles = 25
     num_networks = 2
-    total_quantiles = num_quantiles * num_networks
+    k = num_quantiles - n
+    kN = k * num_networks
 
     network = ZNetwork([50, 50], num_quantiles, num_networks)
     optim = torch.optim.Adam(network.parameters(), lr=1e-3)
 
-    tau_levels = torch.linspace(
-        0.5 / num_quantiles, 1 - 0.5 / num_quantiles, num_quantiles
+    tau_levels = torch.tensor(
+        [(2 * m - 1) / (2 * num_quantiles) for m in range(1, num_quantiles + 1)]
     )
     tau_all = tau_levels.repeat(num_networks)
 
@@ -200,52 +201,72 @@ def train_tqc_method(
         current_z_values = network(actions)
 
         with torch.no_grad():
+            # policy
             grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
             grid_z_values = network(grid_actions)
 
-            sorted_z, _ = torch.sort(grid_z_values, dim=-1)
-            truncated_z = sorted_z[:, : total_quantiles - n]
+            grid_q_values = []
+            for i in range(grid_z_values.shape[0]):
+                z_sorted, _ = torch.sort(grid_z_values[i])
+                z_truncated = z_sorted[:kN]
+                q_value = z_truncated.mean()
+                grid_q_values.append(q_value)
+            grid_q_values = torch.stack(grid_q_values)
 
-            grid_q_values = truncated_z.mean(dim=-1)
             best_action_idx = torch.argmax(grid_q_values)
 
-            next_z_values = grid_z_values[best_action_idx]
-            next_z_sorted, _ = torch.sort(next_z_values)
+            next_z_all = grid_z_values[best_action_idx]
+            next_z_sorted, _ = torch.sort(next_z_all)
+            next_z_truncated = next_z_sorted[:kN]
 
-        targets_per_quantile = rewards.unsqueeze(
-            -1
-        ) + gamma * next_z_sorted.unsqueeze(0)
-        current_z_sorted, _ = torch.sort(current_z_values, dim=-1)
+        batch_size = rewards.shape[0]
+        targets = torch.zeros(batch_size, kN)
+        for b in range(batch_size):
+            for i in range(kN):
+                targets[b, i] = rewards[b] + gamma * next_z_truncated[i]
 
-        diff = targets_per_quantile.detach() - current_z_sorted
-        abs_diff = torch.abs(diff)
-        huber_loss = torch.where(abs_diff <= 1.0, 0.5 * diff**2, abs_diff - 0.5)
+        total_loss = 0.0
+        for b in range(batch_size):
+            for m in range(num_quantiles * num_networks):
+                tau_m = tau_all[m]
+                for i in range(kN):
+                    diff = targets[b, i] - current_z_values[b, m]
 
-        indicator = (diff < 0).float()
-        quantile_weights = torch.abs(tau_all.unsqueeze(0) - indicator)
+                    abs_diff = torch.abs(diff)
+                    if abs_diff <= 1.0:
+                        huber = 0.5 * diff * diff
+                    else:
+                        huber = abs_diff - 0.5
 
-        loss = torch.mean(quantile_weights * huber_loss)
+                    indicator = 1.0 if diff < 0 else 0.0
+                    weight = torch.abs(tau_m - indicator)
+
+                    total_loss += weight * huber
+
+        loss = total_loss / (kN * num_quantiles * num_networks * batch_size)
 
         optim.zero_grad()
         loss.backward()
         optim.step()
 
     class TQCEvaluator:
-        def __init__(
-            self, network: nn.Module, n_drop: int, total_q: int
-        ) -> None:
+        def __init__(self, network: nn.Module, k: int, num_nets: int) -> None:
             self.network = network
-            self.n_drop = n_drop
-            self.total_q = total_q
+            self.k = k
+            self.num_nets = num_nets
+            self.kN = k * num_nets
 
         def __call__(self, actions: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
                 z_values = self.network(actions)
-                sorted_z, _ = torch.sort(z_values, dim=-1)
-                truncated_z = sorted_z[:, : self.total_q - self.n_drop]
-                return truncated_z.mean(dim=-1)
+                q_values = []
+                for i in range(z_values.shape[0]):
+                    z_sorted, _ = torch.sort(z_values[i])
+                    z_truncated = z_sorted[: self.kN]
+                    q_values.append(z_truncated.mean())
+                return torch.stack(q_values)
 
-    return TQCEvaluator(network, n, total_quantiles)
+    return TQCEvaluator(network, k, num_networks)
 
 
 def create_dataset(
