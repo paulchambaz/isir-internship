@@ -215,8 +215,9 @@ def train_tqc_method(
         targets_per_quantile = rewards.unsqueeze(
             -1
         ) + gamma * next_z_sorted.unsqueeze(0)
+        current_z_sorted, _ = torch.sort(current_z_values, dim=-1)
 
-        diff = targets_per_quantile.detach() - current_z_values
+        diff = targets_per_quantile.detach() - current_z_sorted
         abs_diff = torch.abs(diff)
         huber_loss = torch.where(abs_diff <= 1.0, 0.5 * diff**2, abs_diff - 0.5)
 
