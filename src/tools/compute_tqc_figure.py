@@ -217,12 +217,13 @@ def train_tqc_method(
         ) + gamma * next_z_sorted.unsqueeze(0)
 
         diff = targets_per_quantile.detach() - current_z_values
+        abs_diff = torch.abs(diff)
+        huber_loss = torch.where(abs_diff <= 1.0, 0.5 * diff**2, abs_diff - 0.5)
 
         indicator = (diff < 0).float()
-        quantile_loss = torch.abs(tau_all.unsqueeze(0) - indicator) * torch.abs(
-            diff
-        )
-        loss = torch.mean(quantile_loss)
+        quantile_weights = torch.abs(tau_all.unsqueeze(0) - indicator)
+
+        loss = torch.mean(quantile_weights * huber_loss)
 
         optim.zero_grad()
         loss.backward()
