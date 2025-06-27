@@ -186,7 +186,7 @@ def train_tqc_method(
     actions, rewards = dataset
     num_quantiles = 25
     num_networks = 2
-    num_kept = num_quantiles - n
+
     network = ZNetwork([50, 50], num_quantiles, num_networks)
     optim = torch.optim.Adam(network.parameters(), lr=1e-3)
 
@@ -197,8 +197,8 @@ def train_tqc_method(
             grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
             grid_z_values = network(grid_actions)
 
-            sorted_z, _ = torch.sort(grid_z_values, dim=-1)
-            truncated_z = sorted_z[:, :num_kept]
+            sorted_z, _ = torch.sort(grid_z_values, dim=-1, descending=True)
+            truncated_z = sorted_z[:, n:]
             grid_q_values = truncated_z.mean(dim=-1)
 
             best_action_idx = torch.argmax(grid_q_values)
@@ -220,18 +220,18 @@ def train_tqc_method(
         optim.step()
 
     class TQCEvaluator:
-        def __init__(self, network: nn.Module, num_kept: int) -> None:
+        def __init__(self, network: nn.Module, n_drop: int) -> None:
             self.network = network
-            self.num_kept = num_kept
+            self.n_drop = n_drop
 
         def __call__(self, actions: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
                 z_values = self.network(actions)
-                sorted_z, _ = torch.sort(z_values, dim=-1)
-                truncated_z = sorted_z[:, : self.num_kept]
+                sorted_z, _ = torch.sort(z_values, dim=-1, descending=True)
+                truncated_z = sorted_z[:, self.n_drop :]
                 return truncated_z.mean(dim=-1)
 
-    return TQCEvaluator(network, num_kept)
+    return TQCEvaluator(network, n)
 
 
 def create_dataset(
