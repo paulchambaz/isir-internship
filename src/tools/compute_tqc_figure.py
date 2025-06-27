@@ -186,9 +186,15 @@ def train_tqc_method(
     actions, rewards = dataset
     num_quantiles = 25
     num_networks = 2
+    total_quantiles = num_quantiles * num_networks
 
     network = ZNetwork([50, 50], num_quantiles, num_networks)
     optim = torch.optim.Adam(network.parameters(), lr=1e-3)
+
+    tau_levels = torch.linspace(
+        0.5 / num_quantiles, 1 - 0.5 / num_quantiles, num_quantiles
+    )
+    tau_all = tau_levels.repeat(num_networks)
 
     for _ in range(iterations):
         current_z_values = network(actions)
@@ -197,41 +203,47 @@ def train_tqc_method(
             grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
             grid_z_values = network(grid_actions)
 
-            sorted_z, _ = torch.sort(grid_z_values, dim=-1, descending=True)
-            truncated_z = sorted_z[:, n:]
+            sorted_z, _ = torch.sort(grid_z_values, dim=-1)
+            truncated_z = sorted_z[:, : total_quantiles - n]
+
             grid_q_values = truncated_z.mean(dim=-1)
-
             best_action_idx = torch.argmax(grid_q_values)
-            best_q_value = grid_q_values[best_action_idx]
 
-        targets = rewards + gamma * best_q_value
-        targets = targets.unsqueeze(-1).expand(-1, num_quantiles * num_networks)
+            next_z_values = grid_z_values[best_action_idx]
+            next_z_sorted, _ = torch.sort(next_z_values)
 
-        diff = targets.detach() - current_z_values
-        tau = torch.linspace(
-            0.5 / num_quantiles, 1 - 0.5 / num_quantiles, num_quantiles
+        targets_per_quantile = rewards.unsqueeze(
+            -1
+        ) + gamma * next_z_sorted.unsqueeze(0)
+
+        diff = targets_per_quantile.detach() - current_z_values
+
+        indicator = (diff < 0).float()
+        quantile_loss = torch.abs(tau_all.unsqueeze(0) - indicator) * torch.abs(
+            diff
         )
-        tau = tau.repeat(num_networks).unsqueeze(0)
-
-        loss = torch.mean(torch.abs(tau - (diff < 0).float()) * diff)
+        loss = torch.mean(quantile_loss)
 
         optim.zero_grad()
         loss.backward()
         optim.step()
 
     class TQCEvaluator:
-        def __init__(self, network: nn.Module, n_drop: int) -> None:
+        def __init__(
+            self, network: nn.Module, n_drop: int, total_q: int
+        ) -> None:
             self.network = network
             self.n_drop = n_drop
+            self.total_q = total_q
 
         def __call__(self, actions: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
                 z_values = self.network(actions)
-                sorted_z, _ = torch.sort(z_values, dim=-1, descending=True)
-                truncated_z = sorted_z[:, self.n_drop :]
+                sorted_z, _ = torch.sort(z_values, dim=-1)
+                truncated_z = sorted_z[:, : self.total_q - self.n_drop]
                 return truncated_z.mean(dim=-1)
 
-    return TQCEvaluator(network, n)
+    return TQCEvaluator(network, n, total_quantiles)
 
 
 def create_dataset(
