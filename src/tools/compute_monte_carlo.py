@@ -145,15 +145,16 @@ def main() -> None:
                 partial_history = pickle.load(f)  # noqa: S301
 
             for step_id, state_dict in partial_history.items():
-                policy_net = load_policy_from_state(state_dict)
+                if step_id % 20 == 0:
+                    policy_net = load_policy_from_state(state_dict)
 
-                mc_returns[step_id] = compute_mc_values_grid(
-                    policy_net,
-                    grid_size=50,
-                    n_trajectories=200,
-                    max_steps=1000,
-                    gamma=0.999,
-                )
+                    mc_returns[step_id] = compute_mc_values_grid(
+                        policy_net,
+                        grid_size=50,
+                        n_trajectories=200,
+                        max_steps=1000,
+                        gamma=0.999,
+                    )
 
             del partial_history
             gc.collect()
