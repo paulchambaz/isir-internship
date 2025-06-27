@@ -151,7 +151,7 @@ def train_min_method(
 
         with torch.no_grad():
             grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
-            grid_q_values = torch.stack(
+            grid_q_values, _ = torch.stack(
                 [network(grid_actions) for network in networks]
             ).min(dim=0)
             best_action_idx = torch.argmax(grid_q_values)
@@ -247,9 +247,9 @@ def create_dataset(
     return actions_tensor, rewards_tensor
 
 
-def robust_mean(data: np.ndarray) -> float:
-    p10, p90 = np.percentile(data, [10, 90])
-    return np.mean(data[(data >= p10) & (data <= p90)])
+def robust_mean(data: np.ndarray, p1: int, p2: int) -> float:
+    q1, q2 = np.quantile(data, [p1, p2])
+    return np.mean(data[(data >= q1) & (data <= q2)])
 
 
 def compute_bias_variance(
@@ -274,13 +274,19 @@ def compute_bias_variance(
         predicted_q = trained_net(eval_actions).numpy()
         true_q = np.array([mdp.true_q_value(a.item()) for a in eval_actions])
 
-        errors.append(predicted_q - true_q)
-        optim_actions.append(eval_actions[np.argmax(predicted_q)].item())
+        error = predicted_q - true_q
+        errors.append(error)
+
+        optim_action = eval_actions[np.argmax(predicted_q)].item()
+        optim_actions.append(optim_action)
 
     errors = np.array(errors)
-    bias = robust_mean(np.mean(errors, axis=1))
-    variance = robust_mean(np.var(errors, axis=1))
-    policy_error = robust_mean(np.abs(optim_actions - mdp.optimal_action))
+
+    bias = robust_mean(np.mean(errors, axis=1), 0.1, 0.9)
+    variance = robust_mean(np.var(errors, axis=1), 0.1, 0.9)
+    policy_error = robust_mean(
+        np.abs(optim_actions - mdp.optimal_action), 0.1, 0.9
+    )
 
     return bias, variance, policy_error
 
@@ -289,8 +295,11 @@ def main() -> None:
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
     avg_data = [1, 3, 5, 10, 20, 50]
+    # avg_data = [3, 4]
     min_data = [2, 3, 4, 6, 8, 10]
+    # min_data = [3, 4]
     tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    # tqc_data = [3, 4]
 
     experiments = list(
         itertools.chain(
@@ -300,20 +309,20 @@ def main() -> None:
         )
     )
 
-    results = {"avg": [], "min": [], "tqc": []}
+    results = {}
 
     for method, n, train_fn in tqdm(experiments, desc="Running experiments"):
         tqdm.write(f"Processing {method} with n={n}")
-        results[method].append(
-            compute_bias_variance(
-                n=n,
-                mdp=mdp,
-                buffer_size=50,
-                iterations=3000,
-                num_seed=100,
-                train_fn=train_fn,
-            )
+        results[(method, n)] = compute_bias_variance(
+            n=n,
+            mdp=mdp,
+            buffer_size=50,
+            iterations=3000,
+            num_seed=3,
+            train_fn=train_fn,
         )
+
+    print(results)
 
     Path("outputs").mkdir(exist_ok=True)
     with open("outputs/tqc_figure_results.pkl", "wb") as f:
