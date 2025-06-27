@@ -201,17 +201,12 @@ def train_tqc_method(
         current_z_values = network(actions)
 
         with torch.no_grad():
-            # policy
             grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
             grid_z_values = network(grid_actions)
 
-            grid_q_values = []
-            for i in range(grid_z_values.shape[0]):
-                z_sorted, _ = torch.sort(grid_z_values[i])
-                z_truncated = z_sorted[:kN]
-                q_value = z_truncated.mean()
-                grid_q_values.append(q_value)
-            grid_q_values = torch.stack(grid_q_values)
+            grid_z_sorted, _ = torch.sort(grid_z_values, dim=-1)
+            grid_z_truncated = grid_z_sorted[:, :kN]
+            grid_q_values = grid_z_truncated.mean(dim=-1)
 
             best_action_idx = torch.argmax(grid_q_values)
 
@@ -219,31 +214,24 @@ def train_tqc_method(
             next_z_sorted, _ = torch.sort(next_z_all)
             next_z_truncated = next_z_sorted[:kN]
 
-        batch_size = rewards.shape[0]
-        targets = torch.zeros(batch_size, kN)
-        for b in range(batch_size):
-            for i in range(kN):
-                targets[b, i] = rewards[b] + gamma * next_z_truncated[i]
+        targets = rewards.unsqueeze(-1) + gamma * next_z_truncated.unsqueeze(0)
 
-        total_loss = 0.0
-        for b in range(batch_size):
-            for m in range(num_quantiles * num_networks):
-                tau_m = tau_all[m]
-                for i in range(kN):
-                    diff = targets[b, i] - current_z_values[b, m]
+        targets_expanded = targets.unsqueeze(1)
+        current_z_expanded = current_z_values.unsqueeze(-1)
+        diff = targets_expanded - current_z_expanded
 
-                    abs_diff = torch.abs(diff)
-                    if abs_diff <= 1.0:
-                        huber = 0.5 * diff * diff
-                    else:
-                        huber = abs_diff - 0.5
+        abs_diff = torch.abs(diff)
+        huber = torch.where(abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5)
 
-                    indicator = 1.0 if diff < 0 else 0.0
-                    weight = torch.abs(tau_m - indicator)
+        indicator = (diff < 0).float()
+        tau_expanded = tau_all.unsqueeze(0).unsqueeze(-1)
+        weight = torch.abs(tau_expanded - indicator)
 
-                    total_loss += weight * huber
+        total_loss = torch.sum(weight * huber)
 
-        loss = total_loss / (kN * num_quantiles * num_networks * batch_size)
+        loss = total_loss / (
+            kN * num_quantiles * num_networks * rewards.shape[0]
+        )
 
         optim.zero_grad()
         loss.backward()
@@ -259,12 +247,9 @@ def train_tqc_method(
         def __call__(self, actions: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
                 z_values = self.network(actions)
-                q_values = []
-                for i in range(z_values.shape[0]):
-                    z_sorted, _ = torch.sort(z_values[i])
-                    z_truncated = z_sorted[: self.kN]
-                    q_values.append(z_truncated.mean())
-                return torch.stack(q_values)
+                z_sorted, _ = torch.sort(z_values, dim=-1)
+                z_truncated = z_sorted[:, : self.kN]
+                return z_truncated.mean(dim=-1)
 
     return TQCEvaluator(network, k, num_networks)
 
