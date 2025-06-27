@@ -27,8 +27,6 @@ def main() -> None:
 
     ax.set_xscale("symlog", linthresh=1)
     ax.set_yscale("log")
-    # ax.set_xlim(-2e1, 2e4)
-    # ax.set_ylim(0.5e-1, 2e1)
 
     ax.grid(visible=True, which="major", alpha=0.6, linewidth=0.8)
 
@@ -64,7 +62,7 @@ def main() -> None:
     }
 
     for (method, n), (bias, variance, policy_error) in results.items():
-        size = max(100, min(500, 400 - policy_error * 1000))
+        size = 2 * max(100, min(500, 400 - policy_error * 1000))
 
         if method == "tqc":
             tqc_points["x"].append(bias)
@@ -83,31 +81,28 @@ def main() -> None:
             avg_points["numbers"].append(str(n))
 
     for data in [tqc_points, min_points, avg_points]:
-        if data["x"]:  # Only plot if we have data
-            ax.scatter(
-                data["x"],
-                data["y"],
-                c=data["color"],
-                s=data["sizes"],
-                alpha=0.7,
+        ax.scatter(
+            data["x"],
+            data["y"],
+            c=data["color"],
+            s=data["sizes"],
+            alpha=0.7,
+        )
+        for x, y, num in zip(
+            data["x"],
+            data["y"],
+            data["numbers"],
+            strict=True,
+        ):
+            ax.text(
+                x,
+                y,
+                num,
+                ha="center",
+                va="center",
+                fontsize=16,
+                fontweight="bold",
             )
-            for x, y, num, size in zip(
-                data["x"],
-                data["y"],
-                data["numbers"],
-                data["sizes"],
-                strict=True,
-            ):
-                fontsize = 14 if size > 200 else 12
-                ax.text(
-                    x,
-                    y,
-                    num,
-                    ha="center",
-                    va="center",
-                    fontsize=fontsize,
-                    fontweight="bold",
-                )
 
     legend_elements = [
         Line2D(
@@ -175,39 +170,12 @@ def main() -> None:
 
     plt.draw()
 
-    # fig.text(
-    #     0.15,
-    #     0.9,
-    #     "d",
-    #     ha="center",
-    #     va="center",
-    #     fontsize=14,
-    #     fontweight="bold",
-    #     color="black",
-    # )
-    # fig.text(
-    #     0.15,
-    #     0.845,
-    #     "N",
-    #     ha="center",
-    #     va="center",
-    #     fontsize=14,
-    #     fontweight="bold",
-    #     color="black",
-    # )
-    # fig.text(
-    #     0.15,
-    #     0.79,
-    #     "N",
-    #     ha="center",
-    #     va="center",
-    #     fontsize=14,
-    #     fontweight="bold",
-    #     color="black",
-    # )
-
     plt.tight_layout()
-    plt.show()
+    plt.savefig(
+        "paper/figures/tqc_figure.svg",
+        bbox_inches="tight",
+        dpi=300,
+    )
 
 
 if __name__ == "__main__":
