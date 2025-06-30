@@ -22,7 +22,7 @@ from .utils import compute_stats
 
 
 def train(
-    agent: algos.Algo,
+    agent: algos.RLAlgo,
     train_env: gym.Env,
     test_env: gym.Env,
     steps: int,
@@ -31,13 +31,13 @@ def train(
     gradient_steps: int,
     test_freq: int,
     count: int,
-) -> tuple[algos.Algo, dict]:
+) -> tuple[algos.RLAlgo, dict]:
     history = {}
     agent_history = {}
 
     agent_state = agent.get_state()
     best_agent_state = agent_state
-    best_iqm = -float("inf")
+    best_iqm = float("-inf")
 
     for i in range(count):
         training_steps = 0
@@ -134,7 +134,7 @@ def expert_mountaincar(env: gym.Env, count: int) -> None:
     return transitions
 
 
-def test(agent: algos.Algo, env: gym.Env, n: int) -> list:
+def test(agent: algos.RLAlgo, env: gym.Env, n: int) -> list:
     results = []
 
     for _ in range(n):

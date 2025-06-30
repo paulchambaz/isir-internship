@@ -13,7 +13,7 @@ __author__ = "Paul Chambaz"
 
 from .afu import AFU
 from .afup import AFUP
-from .algo import Algo
+from .rl_algo import RLAlgo
 from .sac import SAC
 from .simple_right import SimpleRight
 from .tqc import TQC

@@ -13,12 +13,12 @@ import torch
 import torch.distributions as dist
 from torch import nn
 
-from .algo import Algo
 from .replay import ReplayBuffer
+from .rl_algo import RLAlgo
 from .utils import soft_update_target
 
 
-class SAC(Algo):
+class SAC(RLAlgo):
     """
     Soft Actor-Critic (SAC) algorithm for continuous control tasks.
 
@@ -134,9 +134,7 @@ class SAC(Algo):
         mean, log_std = self.policy_network(state)
 
         action = (
-            mean
-            if evaluation
-            else dist.Normal(mean, log_std.exp() + 1e-8).rsample()
+            mean if evaluation else dist.Normal(mean, log_std.exp()).rsample()
         )
 
         return torch.tanh(action).squeeze(0).detach().numpy()
@@ -163,6 +161,12 @@ class SAC(Algo):
             self.replay_buffer.sample(self.batch_size)
         )
 
+        if self.learn_temperature:
+            temperature_loss = self._compute_temperature_loss(states)
+            self.temperature_optimizer.zero_grad()
+            temperature_loss.backward()
+            self.temperature_optimizer.step()
+
         q_loss = self._compute_q_loss(
             states, actions, rewards, next_states, dones
         )
@@ -176,12 +180,6 @@ class SAC(Algo):
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()
-
-        if self.learn_temperature:
-            temperature_loss = self._compute_temperature_loss(states)
-            self.temperature_optimizer.zero_grad()
-            temperature_loss.backward()
-            self.temperature_optimizer.step()
 
     def get_state(self) -> dict:
         """
@@ -240,7 +238,7 @@ class SAC(Algo):
         q_targets = torch.min(torch.stack(q_targets_list), dim=0)[0]
 
         # r + gamma (1 - d) (min Q(s', a') - log pi (a' | s'))
-        alpha = self.log_alpha.exp() + 1e-8
+        alpha = self.log_alpha.exp()
         targets = rewards + self.gamma * (1.0 - dones.float()) * (
             q_targets - alpha * log_probs.detach()
         )
@@ -263,7 +261,7 @@ class SAC(Algo):
         q_values = torch.min(torch.stack(q_values_list), dim=0)[0]
 
         # EE [ alpha log pi (a | s) - Q (s, a) ]
-        alpha = self.log_alpha.exp() + 1e-8
+        alpha = self.log_alpha.exp()
         return torch.mean(alpha * log_probs - q_values)
 
     def _compute_temperature_loss(self, states: torch.Tensor) -> torch.Tensor:
@@ -271,8 +269,9 @@ class SAC(Algo):
         _, log_probs = self._compute_action_and_log_prob(states)
 
         # EE [ -alpha (log pi (a | s) + H) ]
-        alpha = self.log_alpha.exp() + 1e-8
-        return torch.mean(-alpha * (log_probs.detach() + self.target_entropy))
+        return torch.mean(
+            -self.log_alpha * (log_probs.detach() + self.target_entropy)
+        )
 
     def _compute_action_and_log_prob(
         self, state: torch.Tensor
@@ -287,7 +286,7 @@ class SAC(Algo):
 
         # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
         log_prob_gaussian = gaussian.log_prob(raw_action)
-        eps = torch.finfo(action.dtype).eps
+        eps = 1e-6
         clamped_action = torch.clamp(action, min=-1.0 + eps, max=1.0 - eps)
         tanh_correction = torch.log1p(-(clamped_action**2))
         log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)

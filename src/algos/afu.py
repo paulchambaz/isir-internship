@@ -14,12 +14,12 @@ import numpy as np
 import torch
 from torch import nn
 
-from .algo import Algo
 from .replay import ReplayBuffer
+from .rl_algo import RLAlgo
 from .utils import soft_update_target
 
 
-class AFU(Algo):
+class AFU(RLAlgo):
     """
     Actor-Free critic Updates (AFU) algorithm for continuous control tasks.
 

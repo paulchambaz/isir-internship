@@ -3,10 +3,10 @@ import numpy as np
 
 # from afu_rljax.algorithm import AFU
 from .afu2 import AFU
-from .algo import Algo
+from .rl_algo import RLAlgo
 
 
-class AFUP(Algo):
+class AFUP(RLAlgo):
     __slots__ = [
         "algo",
     ]

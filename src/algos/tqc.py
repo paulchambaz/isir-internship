@@ -13,12 +13,12 @@ import torch
 import torch.distributions as dist
 from torch import nn
 
-from .algo import Algo
 from .replay import ReplayBuffer
+from .rl_algo import RLAlgo
 from .utils import soft_update_target
 
 
-class TQC(Algo):
+class TQC(RLAlgo):
     __slots__ = [
         "action_dim",
         "batch_size",
