@@ -13,6 +13,7 @@ from haiku import PRNGSequence
 from jax import nn
 
 
+@jax.jit
 def soft_update(
     target_params: hk.Params,
     online_params: hk.Params,
@@ -34,6 +35,7 @@ def fake_action(action_space):
     return action_space.sample().astype(np.float32)[None, ...]
 
 
+@jax.jit
 def gaussian_log_prob(
     log_std: jnp.ndarray,
     noise: jnp.ndarray,
@@ -41,6 +43,7 @@ def gaussian_log_prob(
     return -0.5 * (jnp.square(noise) + 2 * log_std + jnp.log(2 * math.pi))
 
 
+@jax.jit
 def gaussian_and_tanh_log_prob(
     log_std: jnp.ndarray,
     noise: jnp.ndarray,
@@ -51,6 +54,7 @@ def gaussian_and_tanh_log_prob(
     )
 
 
+@partial(jax.jit, static_argnums=3)
 def reparameterize_gaussian_and_tanh(
     mean: jnp.ndarray,
     log_std: jnp.ndarray,
@@ -232,6 +236,7 @@ class OffPolicyActorCritic:
     def _sample_action(self, params_actor, state, *args, **kwargs):
         pass
 
+    @partial(jax.jit, static_argnums=0)
     def _calculate_value_list(
         self,
         params_critic: hk.Params,
@@ -240,6 +245,7 @@ class OffPolicyActorCritic:
     ) -> list[jnp.ndarray]:
         return self.critic.apply(params_critic, state, action)
 
+    @partial(jax.jit, static_argnums=0)
     def _calculate_value(
         self,
         params_critic: hk.Params,
@@ -250,6 +256,7 @@ class OffPolicyActorCritic:
             self._calculate_value_list(params_critic, state, action)
         ).min(axis=0)
 
+    @partial(jax.jit, static_argnums=0)
     def _calculate_loss_critic_and_abs_td(
         self,
         value_list: list[jnp.ndarray],
@@ -482,6 +489,7 @@ class AFU(OffPolicyActorCritic):
         opt_init, self.opt_alpha = optix.adam(lr_alpha, b1=0.9)
         self.opt_state_alpha = opt_init(self.log_alpha)
 
+    @partial(jax.jit, static_argnums=0)
     def _select_action(
         self,
         params_actor: hk.Params,
@@ -490,6 +498,7 @@ class AFU(OffPolicyActorCritic):
         mean, _, _ = self.actor.apply(params_actor, state)
         return jnp.tanh(mean)
 
+    @partial(jax.jit, static_argnums=0)
     def _explore(
         self,
         params_actor: hk.Params,
@@ -514,6 +523,7 @@ class AFU(OffPolicyActorCritic):
         weight, batch = self.buffer.sample(self.batch_size)
         state, action, reward, done, next_state = batch
 
+        @partial(jax.jit, static_argnums=(0, 1, 4, 7))
         def optimize_two_models(
             fn_loss: Any,
             opt: Any,
@@ -573,6 +583,7 @@ class AFU(OffPolicyActorCritic):
             **self.kwargs_critic,
         )
 
+        @partial(jax.jit, static_argnums=(0, 1, 4))
         def optimize(
             fn_loss: Any,
             opt: Any,
@@ -630,6 +641,7 @@ class AFU(OffPolicyActorCritic):
         self.info_dict["loss/actor"] = loss_actor
         self.info_dict["loss/alpha"] = loss_alpha
 
+    @partial(jax.jit, static_argnums=0)
     def _sample_action(
         self,
         params_actor: hk.Params,
@@ -639,6 +651,7 @@ class AFU(OffPolicyActorCritic):
         mean, log_std, _ = self.actor.apply(params_actor, state)
         return reparameterize_gaussian_and_tanh(mean, log_std, key, True)
 
+    @partial(jax.jit, static_argnums=0)
     def _calculate_log_pi(
         self,
         action: np.ndarray,
@@ -646,6 +659,7 @@ class AFU(OffPolicyActorCritic):
     ) -> jnp.ndarray:
         return log_pi
 
+    @partial(jax.jit, static_argnums=0)
     def _loss_critic(
         self,
         params_critic: hk.Params,
@@ -697,6 +711,7 @@ class AFU(OffPolicyActorCritic):
         loss_critic *= weight
         return (loss_critic, {"abs_td": jax.lax.stop_gradient(abs_td)})
 
+    @partial(jax.jit, static_argnums=0)
     def _loss_actor(
         self,
         params_actor: hk.Params,
@@ -723,6 +738,7 @@ class AFU(OffPolicyActorCritic):
 
         return loss, jax.lax.stop_gradient(mean_log_pi)
 
+    @partial(jax.jit, static_argnums=0)
     def _loss_alpha(
         self,
         log_alpha: jnp.ndarray,
