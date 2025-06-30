@@ -22,7 +22,7 @@ from .utils import compute_stats
 
 
 def train(
-    agent: algos.AFU,
+    agent: algos.Algo,
     train_env: gym.Env,
     test_env: gym.Env,
     steps: int,
@@ -31,7 +31,7 @@ def train(
     gradient_steps: int,
     test_freq: int,
     count: int,
-) -> tuple[algos.AFU, dict]:
+) -> tuple[algos.Algo, dict]:
     history = {}
     agent_history = {}
 
@@ -193,21 +193,7 @@ def main() -> None:
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
 
-    # agent = algos.SAC(
-    #     action_dim=train_env.action_space.shape[0],
-    #     state_dim=train_env.observation_space.shape[0],
-    #     hidden_dims=[256, 256],
-    #     replay_size=200_000,
-    #     batch_size=256,
-    #     critic_lr=3e-4,
-    #     policy_lr=3e-4,
-    #     temperature_lr=3e-4,
-    #     tau=0.005,
-    #     gamma=0.999,
-    #     alpha=None,
-    # )
-
-    agent = algos.AFU(
+    agent = algos.SAC(
         action_dim=train_env.action_space.shape[0],
         state_dim=train_env.observation_space.shape[0],
         hidden_dims=[256, 256],
@@ -217,12 +203,11 @@ def main() -> None:
         policy_lr=3e-4,
         temperature_lr=3e-4,
         tau=0.005,
-        rho=0.7,
         gamma=0.999,
         alpha=None,
     )
 
-    # agent = algos.AFUPerrin(
+    # agent = algos.AFU(
     #     action_dim=train_env.action_space.shape[0],
     #     state_dim=train_env.observation_space.shape[0],
     #     hidden_dims=[256, 256],
@@ -232,11 +217,26 @@ def main() -> None:
     #     policy_lr=3e-4,
     #     temperature_lr=3e-4,
     #     tau=0.005,
-    #     rho=0.3,
+    #     rho=0.7,
     #     gamma=0.999,
     #     alpha=None,
-    #     action_space=train_env.action_space,
-    #     state_space=train_env.observation_space,
+    # )
+
+    # agent = algos.TQC(
+    #     action_dim=train_env.action_space.shape[0],
+    #     state_dim=train_env.observation_space.shape[0],
+    #     hidden_dims=[256, 256],
+    #     replay_size=200_000,
+    #     batch_size=256,
+    #     critic_lr=3e-4,
+    #     policy_lr=3e-4,
+    #     temperature_lr=3e-4,
+    #     tau=0.005,
+    #     gamma=0.999,
+    #     alpha=None,
+    #     n_quantiles=25,
+    #     n_critics=2,
+    #     quantiles_drop=5,
     # )
 
     if args.env == "mountaincar":
@@ -251,7 +251,7 @@ def main() -> None:
         train_env=train_env,
         test_env=test_env,
         steps=args.steps,
-        warmup=10000,
+        warmup=1000,
         train_freq=32,
         gradient_steps=32,
         test_freq=50,

@@ -14,10 +14,12 @@ import numpy as np
 import torch
 from torch import nn
 
+from .algo import Algo
 from .replay import ReplayBuffer
+from .utils import soft_update_target
 
 
-class AFU:
+class AFU(Algo):
     """
     Actor-Free critic Updates (AFU) algorithm for continuous control tasks.
 
@@ -163,6 +165,8 @@ class AFU:
         self.v_optimizer.step()
         self.q_optimizer.step()
 
+        soft_update_target(self.v_target_network, self.v_network, self.tau)
+
         policy_loss, temperature_loss = self._compute_policy_loss(states)
 
         self.policy_optimizer.zero_grad()
@@ -173,16 +177,6 @@ class AFU:
             self.temperature_optimizer.zero_grad()
             temperature_loss.backward()
             self.temperature_optimizer.step()
-
-        with torch.no_grad():
-            for target_param, param in zip(
-                self.v_target_network.parameters(),
-                self.v_network.parameters(),
-                strict=True,
-            ):
-                target_param.data.copy_(
-                    self.tau * param + (1 - self.tau) * target_param.data
-                )
 
     def get_state(self) -> dict:
         state = {

@@ -13,10 +13,12 @@ import torch
 import torch.distributions as dist
 from torch import nn
 
+from .algo import Algo
 from .replay import ReplayBuffer
+from .utils import soft_update_target
 
 
-class TQC:
+class TQC(Algo):
     class ZNetwork(nn.Module):
         __slots__ = ["networks"]
 
@@ -211,7 +213,7 @@ class TQC:
         z_loss.backward()
         self.z_optimizer.step()
 
-        self._soft_update_targets()
+        soft_update_target(self.z_target_network, self.z_network, self.tau)
 
         policy_loss = self._compute_policy_loss(states)
         self.policy_optimizer.zero_grad()
@@ -351,17 +353,3 @@ class TQC:
 
         weighted_loss = weights * huber
         return weighted_loss.mean()
-
-    def _soft_update_targets(self) -> None:
-        network_pairs = [
-            (self.q_target_network1, self.q_network1),
-            (self.q_target_network2, self.q_network2),
-        ]
-
-        for target_net, current_net in network_pairs:
-            for target_param, param in zip(
-                target_net.parameters(), current_net.parameters(), strict=True
-            ):
-                target_param.data.copy_(
-                    self.tau * param.data + (1.0 - self.tau) * target_param.data
-                )

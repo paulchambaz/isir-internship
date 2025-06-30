@@ -13,10 +13,12 @@ import torch
 import torch.distributions as dist
 from torch import nn
 
+from .algo import Algo
 from .replay import ReplayBuffer
+from .utils import soft_update_target
 
 
-class SAC:
+class SAC(Algo):
     """
     Soft Actor-Critic (SAC) algorithm for continuous control tasks.
 
@@ -39,57 +41,6 @@ class SAC:
         state: Optional pre-trained network state dictionary
     """
 
-    class QNetwork(nn.Module):
-        __slots__ = ["model"]
-
-        def __init__(
-            self, state_dim: int, hidden_dims: list[int], action_dim: int
-        ) -> None:
-            super().__init__()
-            layers = [
-                nn.Linear(state_dim + action_dim, hidden_dims[0]),
-                nn.ReLU(),
-            ]
-            for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-            layers.append(nn.Linear(hidden_dims[-1], 1))
-
-            self.model = nn.Sequential(*layers)
-
-        def forward(
-            self, state: torch.Tensor, action: torch.Tensor
-        ) -> torch.Tensor:
-            state_action = torch.cat([state, action], dim=1)
-            return self.model(state_action).squeeze(-1)
-
-    class PolicyNetwork(nn.Module):
-        __slots__ = [
-            "action_dim",
-            "model",
-        ]
-
-        def __init__(
-            self, state_dim: int, hidden_dims: list[int], action_dim: int
-        ) -> None:
-            super().__init__()
-            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-            for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
-
-            self.model = nn.Sequential(*layers)
-            self.action_dim = action_dim
-
-        def forward(
-            self, state: torch.Tensor
-        ) -> tuple[torch.Tensor, torch.Tensor]:
-            output = self.model(state)
-            mean, log_std = torch.split(output, self.action_dim, dim=-1)
-
-            log_std = torch.clamp(log_std, -20, 2)
-
-            return mean, log_std
-
     __slots__ = [
         "action_dim",
         "batch_size",
@@ -98,12 +49,9 @@ class SAC:
         "log_alpha",
         "policy_network",
         "policy_optimizer",
-        "q_network1",
-        "q_network2",
-        "q_optimizer1",
-        "q_optimizer2",
-        "q_target_network1",
-        "q_target_network2",
+        "q_network",
+        "q_optimizer",
+        "q_target_network",
         "replay_buffer",
         "state_dim",
         "target_entropy",
@@ -130,17 +78,12 @@ class SAC:
         self.action_dim = action_dim
         self.learn_temperature = alpha is None
 
-        self.q_network1 = self.QNetwork(state_dim, hidden_dims, action_dim)
-        self.q_network2 = self.QNetwork(state_dim, hidden_dims, action_dim)
+        self.q_network = self.QNetwork(state_dim, hidden_dims, action_dim, 2)
 
-        self.q_target_network1 = self.QNetwork(
-            state_dim, hidden_dims, action_dim
+        self.q_target_network = self.QNetwork(
+            state_dim, hidden_dims, action_dim, 2
         )
-        self.q_target_network2 = self.QNetwork(
-            state_dim, hidden_dims, action_dim
-        )
-        self.q_target_network1.load_state_dict(self.q_network1.state_dict())
-        self.q_target_network2.load_state_dict(self.q_network2.state_dict())
+        self.q_target_network.load_state_dict(self.q_network.state_dict())
 
         self.policy_network = self.PolicyNetwork(
             state_dim, hidden_dims, action_dim
@@ -152,11 +95,8 @@ class SAC:
             else torch.log(torch.tensor(alpha))
         )
 
-        self.q_optimizer1 = torch.optim.Adam(
-            self.q_network1.parameters(), lr=critic_lr
-        )
-        self.q_optimizer2 = torch.optim.Adam(
-            self.q_network2.parameters(), lr=critic_lr
+        self.q_optimizer = torch.optim.Adam(
+            self.q_network.parameters(), lr=critic_lr
         )
         self.policy_optimizer = torch.optim.Adam(
             self.policy_network.parameters(), lr=policy_lr
@@ -223,17 +163,14 @@ class SAC:
             self.replay_buffer.sample(self.batch_size)
         )
 
-        q1_loss, q2_loss = self._compute_q_loss(
+        q_loss = self._compute_q_loss(
             states, actions, rewards, next_states, dones
         )
-        self.q_optimizer1.zero_grad()
-        q1_loss.backward()
-        self.q_optimizer1.step()
-        self.q_optimizer2.zero_grad()
-        q2_loss.backward()
-        self.q_optimizer2.step()
+        self.q_optimizer.zero_grad()
+        q_loss.backward()
+        self.q_optimizer.step()
 
-        self._soft_update_targets()
+        soft_update_target(self.q_target_network, self.q_network, self.tau)
 
         policy_loss = self._compute_policy_loss(states)
         self.policy_optimizer.zero_grad()
@@ -251,14 +188,11 @@ class SAC:
         Returns dictionary containing all agent state for saving or transferring.
         """
         state = {
-            "q1": self.q_network1.state_dict(),
-            "q2": self.q_network2.state_dict(),
-            "q1_target": self.q_target_network1.state_dict(),
-            "q2_target": self.q_target_network2.state_dict(),
+            "q": self.q_network.state_dict(),
+            "q_target": self.q_target_network.state_dict(),
             "policy": self.policy_network.state_dict(),
             "log_alpha": self.log_alpha.item(),
-            "q_optimizer1": self.q_optimizer1.state_dict(),
-            "q_optimizer2": self.q_optimizer2.state_dict(),
+            "q_optimizer": self.q_optimizer.state_dict(),
             "policy_optimizer": self.policy_optimizer.state_dict(),
             "replay_buffer": self.replay_buffer.get_data(),
         }
@@ -277,14 +211,11 @@ class SAC:
         Args:
             state: Dictionary of agent state from get_state
         """
-        self.q_network1.load_state_dict(state["q1"])
-        self.q_network2.load_state_dict(state["q2"])
-        self.q_target_network1.load_state_dict(state["q1_target"])
-        self.q_target_network2.load_state_dict(state["q2_target"])
+        self.q_network.load_state_dict(state["q"])
+        self.q_target_network.load_state_dict(state["q_target"])
         self.policy_network.load_state_dict(state["policy"])
         self.log_alpha.data = torch.tensor(state["log_alpha"])
-        self.q_optimizer1.load_state_dict(state["q_optimizer1"])
-        self.q_optimizer2.load_state_dict(state["q_optimizer2"])
+        self.q_optimizer.load_state_dict(state["q_optimizer"])
         self.policy_optimizer.load_state_dict(state["policy_optimizer"])
         self.replay_buffer.load_data(state["replay_buffer"])
 
@@ -305,9 +236,8 @@ class SAC:
         next_actions, log_probs = self._compute_action_and_log_prob(next_states)
 
         # min(Q^target_theta_1 (s', a'), Q^target_theta_2 (s', a'))
-        q1_targets = self.q_target_network1(next_states, next_actions)
-        q2_targets = self.q_target_network2(next_states, next_actions)
-        q_targets = torch.min(q1_targets, q2_targets)
+        q_targets_list = self.q_target_network(next_states, next_actions)
+        q_targets = torch.min(torch.stack(q_targets_list), dim=0)[0]
 
         # r + gamma (1 - d) (min Q(s', a') - log pi (a' | s'))
         alpha = self.log_alpha.exp() + 1e-8
@@ -315,24 +245,22 @@ class SAC:
             q_targets - alpha * log_probs.detach()
         )
 
-        def _compute_q_loss_i(q_network: nn.Module) -> torch.Tensor:
-            # EE [ 1/2 * (Q_theta_i (s, a) - y)^2 ]
-            q_values = q_network(states, actions)
-            return torch.mean(0.5 * (q_values - targets.detach()) ** 2)
+        # EE [ 1/2 * (Q_theta_i (s, a) - y)^2 ]
+        q_values_list = self.q_network(states, actions)
+        q_losses = [
+            torch.mean(0.5 * (q_values - targets.detach()) ** 2)
+            for q_values in q_values_list
+        ]
 
-        return (
-            _compute_q_loss_i(self.q_network1),
-            _compute_q_loss_i(self.q_network2),
-        )
+        return sum(q_losses)
 
     def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:
         # pi(s) log pi (pi(s) | s)
         actions, log_probs = self._compute_action_and_log_prob(states)
 
         # min(Q_theta_1 (s, a), Q_theta_2 (s, a))
-        q1_values = self.q_network1(states, actions)
-        q2_values = self.q_network2(states, actions)
-        q_values = torch.min(q1_values, q2_values)
+        q_values_list = self.q_network(states, actions)
+        q_values = torch.min(torch.stack(q_values_list), dim=0)[0]
 
         # EE [ alpha log pi (a | s) - Q (s, a) ]
         alpha = self.log_alpha.exp() + 1e-8
@@ -366,16 +294,73 @@ class SAC:
 
         return action, log_prob
 
-    def _soft_update_targets(self) -> None:
-        network_pairs = [
-            (self.q_target_network1, self.q_network1),
-            (self.q_target_network2, self.q_network2),
+    # def _soft_update_targets(self) -> None:
+    #     with torch.no_grad():
+    #         for target_param, param in zip(
+    #             self.q_target_network.parameters(),
+    #             self.q_network.parameters(),
+    #             strict=True,
+    #         ):
+    #             target_param.data.copy_(
+    #                 self.tau * param + (1 - self.tau) * target_param.data
+    #             )
+
+    class QNetwork(nn.Module):
+        __slots__ = ["networks"]
+
+        def __init__(
+            self,
+            state_dim: int,
+            hidden_dims: list[int],
+            action_dim: int,
+            n_critics: int,
+        ) -> None:
+            super().__init__()
+            self.networks = nn.ModuleList()
+
+            for _ in range(n_critics):
+                layers = [
+                    nn.Linear(state_dim + action_dim, hidden_dims[0]),
+                    nn.ReLU(),
+                ]
+                for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                    layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+                layers.append(nn.Linear(hidden_dims[-1], 1))
+
+                self.networks.append(nn.Sequential(*layers))
+
+        def forward(
+            self, state: torch.Tensor, action: torch.Tensor
+        ) -> list[torch.Tensor]:
+            state_action = torch.cat([state, action], dim=1)
+            return [
+                network(state_action).squeeze(-1) for network in self.networks
+            ]
+
+    class PolicyNetwork(nn.Module):
+        __slots__ = [
+            "action_dim",
+            "model",
         ]
 
-        for target_net, current_net in network_pairs:
-            for target_param, param in zip(
-                target_net.parameters(), current_net.parameters(), strict=True
-            ):
-                target_param.data.copy_(
-                    self.tau * param.data + (1.0 - self.tau) * target_param.data
-                )
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], action_dim: int
+        ) -> None:
+            super().__init__()
+            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
+
+            self.model = nn.Sequential(*layers)
+            self.action_dim = action_dim
+
+        def forward(
+            self, state: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            output = self.model(state)
+            mean, log_std = torch.split(output, self.action_dim, dim=-1)
+
+            log_std = torch.clamp(log_std, -20, 2)
+
+            return mean, log_std
