@@ -257,26 +257,30 @@ class AFU(RLAlgo):
 
         q_values = self.q_network(states, actions)
         q_final = q_values[-1]
+
+        q_loss = torch.mean((q_targets - q_final) ** 2)
+
         optim_advantages = -torch.stack(q_values[:-1])
 
-        indicator = (
+        mix_case = (
             (optim_values + optim_advantages < q_targets.unsqueeze(0))
             .detach()
             .float()
         )
         upsilon_values = (
-            1 - self.rho * indicator
-        ) * optim_values + self.rho * indicator * optim_values.detach()
+            1 - self.rho * mix_case
+        ) * optim_values + self.rho * mix_case * optim_values.detach()
 
         target_diff = upsilon_values - q_targets.unsqueeze(0)
-        z_values = torch.where(
-            (optim_values >= q_targets.unsqueeze(0)).detach(),
-            (optim_advantages + target_diff) ** 2,
-            optim_advantages**2 + target_diff**2,
-        )
-        va_loss = torch.mean(z_values)
 
-        q_loss = torch.mean((q_targets - q_final) ** 2)
+        up_case = (optim_values >= q_targets.unsqueeze(0)).detach().float()
+        z_values = (
+            optim_advantages**2
+            + up_case * 2 * optim_advantages * target_diff
+            + target_diff**2
+        )
+
+        va_loss = torch.mean(z_values)
 
         return va_loss + q_loss
 
