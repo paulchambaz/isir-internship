@@ -164,13 +164,11 @@ def main() -> None:
         "pendulum": "Pendulum-v1",
     }
 
-    algos = ["afu", "sac", "tqc"]
-
     parser = argparse.ArgumentParser(description="Test RL algorithms")
     parser.add_argument(
         "--algo",
         type=str,
-        choices=algos,
+        choices=["afu", "sac", "tqc"],
         required=True,
         help="Algorithms",
     )
