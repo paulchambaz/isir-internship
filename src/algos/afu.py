@@ -185,8 +185,6 @@ class AFU(RLAlgo):
         self.v_optimizer.step()
         self.q_optimizer.step()
 
-        soft_update_target(self.v_target_network, self.v_network, self.tau)
-
         policy_loss, temperature_loss = self._compute_policy_loss(states)
 
         self.policy_optimizer.zero_grad()
@@ -197,6 +195,8 @@ class AFU(RLAlgo):
             self.temperature_optimizer.zero_grad()
             temperature_loss.backward()
             self.temperature_optimizer.step()
+
+        soft_update_target(self.v_target_network, self.v_network, self.tau)
 
     def get_state(self) -> dict:
         state = {
@@ -312,10 +312,9 @@ class AFU(RLAlgo):
         raw_action = gaussian.rsample()
         action = torch.tanh(raw_action)
 
-        # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
         log_prob_gaussian = gaussian.log_prob(raw_action)
-        clamped_action = torch.clamp(action, min=-1.0 + 1e-6, max=1.0 - 1e-6)
-        tanh_correction = torch.log1p(-(clamped_action**2))
+        clamped_action = torch.relu(1.0 - action**2) + 1e-6
+        tanh_correction = torch.log(clamped_action)
         log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
 
         return action, log_prob

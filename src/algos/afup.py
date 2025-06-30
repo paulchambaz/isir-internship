@@ -39,7 +39,7 @@ class AFUP(RLAlgo):
             lr_critic=critic_lr,
             lr_alpha=temperature_lr,
             tau=tau,
-            gradient_reduction=rho,
+            gradient_reduction=1-rho,
             gamma=gamma,
             seed=42,
             num_agent_steps=100_000,

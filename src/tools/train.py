@@ -253,7 +253,7 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
-                rho=0.3,
+                rho=0.7,
                 action_space=train_env.action_space,
                 state_space=train_env.observation_space,
             )
