@@ -1,3 +1,5 @@
+# afu2.py
+
 import math
 from abc import abstractmethod
 from functools import partial
@@ -691,15 +693,20 @@ class AFU(OffPolicyActorCritic):
         grad_red = gradient_reduction
 
         optim_advantages = -jnp.asarray(critic[:-1])
-        up_case = jax.lax.stop_gradient(target_q <= optim_values)
-        no_mix_case = jax.lax.stop_gradient(
-            target_q <= optim_values + optim_advantages
+        mix_case = jax.lax.stop_gradient(
+            target_q > optim_values + optim_advantages
+        )
+        mix_gd_optim_values = (
+            mix_case
+            * (
+                jax.lax.stop_gradient((1 - grad_red) * optim_values)
+                + grad_red * optim_values
+            )
+            + (1 - mix_case) * optim_values
         )
 
-        mix_gd_optim_values = (1 - no_mix_case) * (
-            jax.lax.stop_gradient((1 - grad_red) * optim_values)
-            + grad_red * optim_values
-        ) + no_mix_case * optim_values
+        up_case = jax.lax.stop_gradient(target_q <= optim_values)
+
         loss_critic = (
             optim_advantages**2
             + up_case * 2 * optim_advantages * (mix_gd_optim_values - target_q)
