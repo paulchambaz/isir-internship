@@ -164,7 +164,16 @@ def main() -> None:
         "pendulum": "Pendulum-v1",
     }
 
+    algos = ["afu", "sac", "tqc"]
+
     parser = argparse.ArgumentParser(description="Test RL algorithms")
+    parser.add_argument(
+        "--algo",
+        type=str,
+        choices=algos,
+        required=True,
+        help="Algorithms",
+    )
     parser.add_argument(
         "--env",
         type=str,
@@ -193,51 +202,65 @@ def main() -> None:
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
 
-    agent = algos.SAC(
-        action_dim=train_env.action_space.shape[0],
-        state_dim=train_env.observation_space.shape[0],
-        hidden_dims=[256, 256],
-        replay_size=200_000,
-        batch_size=256,
-        critic_lr=3e-4,
-        policy_lr=3e-4,
-        temperature_lr=3e-4,
-        tau=0.005,
-        gamma=0.999,
-        alpha=None,
-    )
+    action_dim = train_env.action_space.shape[0]
+    state_dim = train_env.observation_space.shape[0]
+    hidden_dims = [256, 256]
+    replay_size = 200_000
+    batch_size = 256
+    lr = 3e-4
+    tau = 0.005
+    gamma = 0.999
+    alpha = None
 
-    # agent = algos.AFU(
-    #     action_dim=train_env.action_space.shape[0],
-    #     state_dim=train_env.observation_space.shape[0],
-    #     hidden_dims=[256, 256],
-    #     replay_size=200_000,
-    #     batch_size=256,
-    #     critic_lr=3e-4,
-    #     policy_lr=3e-4,
-    #     temperature_lr=3e-4,
-    #     tau=0.005,
-    #     rho=0.7,
-    #     gamma=0.999,
-    #     alpha=None,
-    # )
-
-    # agent = algos.TQC(
-    #     action_dim=train_env.action_space.shape[0],
-    #     state_dim=train_env.observation_space.shape[0],
-    #     hidden_dims=[256, 256],
-    #     replay_size=200_000,
-    #     batch_size=256,
-    #     critic_lr=3e-4,
-    #     policy_lr=3e-4,
-    #     temperature_lr=3e-4,
-    #     tau=0.005,
-    #     gamma=0.999,
-    #     alpha=None,
-    #     n_quantiles=25,
-    #     n_critics=2,
-    #     quantiles_drop=5,
-    # )
+    match args.algo:
+        case "sac":
+            agent = algos.SAC(
+                action_dim=action_dim,
+                state_dim=state_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+            )
+        case "afu":
+            agent = algos.AFU(
+                action_dim=action_dim,
+                state_dim=state_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                rho=0.7,
+            )
+        case "tqc":
+            agent = algos.TQC(
+                action_dim=action_dim,
+                state_dim=state_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                n_quantiles=25,
+                n_critics=3,
+                quantiles_drop=2,
+            )
+        case _:
+            return
 
     if args.env == "mountaincar":
         expert_transitions = expert_mountaincar(train_env, count=10)
