@@ -134,7 +134,7 @@ def expert_mountaincar(env: gym.Env, count: int) -> None:
     return transitions
 
 
-def test(agent: algos.SAC, env: gym.Env, n: int) -> list:
+def test(agent: algos.Algo, env: gym.Env, n: int) -> list:
     results = []
 
     for _ in range(n):
@@ -168,7 +168,7 @@ def main() -> None:
     parser.add_argument(
         "--algo",
         type=str,
-        choices=["afu", "sac", "tqc"],
+        choices=["afu", "afup", "sac", "tqc"],
         required=True,
         help="Algorithms",
     )
@@ -239,6 +239,23 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 rho=0.7,
+            )
+        case "afup":
+            agent = algos.AFUP(
+                action_dim=action_dim,
+                state_dim=state_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                rho=0.3,
+                action_space=train_env.action_space,
+                state_space=train_env.observation_space,
             )
         case "tqc":
             agent = algos.TQC(

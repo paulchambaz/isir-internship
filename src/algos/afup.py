@@ -3,9 +3,10 @@ import numpy as np
 
 # from afu_rljax.algorithm import AFU
 from .afu2 import AFU
+from .algo import Algo
 
 
-class AFUPerrin:
+class AFUP(Algo):
     __slots__ = [
         "algo",
     ]

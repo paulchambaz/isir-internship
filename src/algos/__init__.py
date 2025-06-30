@@ -12,10 +12,10 @@ __version__ = "0.1.0"
 __author__ = "Paul Chambaz"
 
 from .afu import AFU
-from .afu_perrin import AFUPerrin
+from .afup import AFUP
 from .algo import Algo
 from .sac import SAC
 from .simple_right import SimpleRight
 from .tqc import TQC
 
-__all__ = ["AFU", "SAC", "TQC", "AFUPerrin", "Algo", "SimpleRight"]
+__all__ = ["AFU", "AFUP", "SAC", "TQC", "Algo", "SimpleRight"]
