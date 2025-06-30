@@ -20,6 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Test RL algorithms")
     parser.add_argument("--sac", type=str, help="SAC history file")
     parser.add_argument("--afu", type=str, help="AFU history file")
+    parser.add_argument("--tqc", type=str, help="TQC history file")
     args = parser.parse_args()
 
     colors = ["#d66b6a", "#5591e1", "#6ca247", "#39a985", "#ad75ca", "#c77c1e"]
@@ -29,8 +30,7 @@ def main() -> None:
     plt.rcParams["font.family"] = "serif"
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    color_idx = 0
-    for algo_name in ["sac", "afu"]:
+    for i, algo_name in enumerate(["sac", "afu", "tqc"]):
         file_path = getattr(args, algo_name)
         if file_path:
             with open(file_path, "rb") as f:
@@ -40,13 +40,12 @@ def main() -> None:
             stats = [compute_stats(results) for results in history.values()]
             mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
 
-            color = colors[color_idx % len(colors)]
+            color = colors[i % len(colors)]
 
             ax.plot(
                 steps, iqms, linewidth=2, color=color, label=algo_name.upper()
             )
             ax.fill_between(steps, q1s, q3s, alpha=0.25, color=color)
-            color_idx += 1
 
     ax.set_xlabel("Training Steps")
     plt.gca().xaxis.set_major_formatter(
