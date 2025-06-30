@@ -46,6 +46,27 @@ class AFU(RLAlgo):
         state: Optional pre-trained network state dictionary
     """
 
+    __slots__ = [
+        "action_dim",
+        "batch_size",
+        "gamma",
+        "learn_temperature",
+        "log_alpha",
+        "policy_network",
+        "policy_optimizer",
+        "q_network",
+        "q_optimizer",
+        "replay_buffer",
+        "rho",
+        "state_dim",
+        "target_entropy",
+        "tau",
+        "temperature_optimizer",
+        "v_network",
+        "v_optimizer",
+        "v_target_network",
+    ]
+
     def __init__(
         self,
         state_dim: int,
@@ -248,10 +269,6 @@ class AFU(RLAlgo):
             1 - self.rho * indicator
         ) * optim_values + self.rho * indicator * optim_values.detach()
 
-        # upsilon_values = (1 - indicator) * (
-        #     ((1 - self.rho) * optim_values).detach() + self.rho * optim_values
-        # ) + indicator * optim_values
-
         target_diff = upsilon_values - q_targets.unsqueeze(0)
         z_values = torch.where(
             (optim_values >= q_targets.unsqueeze(0)).detach(),
@@ -284,9 +301,8 @@ class AFU(RLAlgo):
         alpha = self.log_alpha.exp().detach()
         policy_loss = torch.mean(alpha * log_probs - q_value)
 
-        mean_log_prob = torch.mean(log_probs).detach()
-        temperature_loss = -torch.mean(
-            self.log_alpha * (self.target_entropy + mean_log_prob)
+        temperature_loss = torch.mean(
+            -self.log_alpha * (log_probs.detach() + self.target_entropy)
         )
 
         return policy_loss, temperature_loss

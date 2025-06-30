@@ -20,6 +20,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Test RL algorithms")
     parser.add_argument("--sac", type=str, help="SAC history file")
     parser.add_argument("--afu", type=str, help="AFU history file")
+    parser.add_argument("--afup", type=str, help="AFUP history file")
     parser.add_argument("--tqc", type=str, help="TQC history file")
     args = parser.parse_args()
 
@@ -30,7 +31,7 @@ def main() -> None:
     plt.rcParams["font.family"] = "serif"
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    for i, algo_name in enumerate(["sac", "afu", "tqc"]):
+    for i, algo_name in enumerate(["sac", "afu", "tqc", "afup"]):
         file_path = getattr(args, algo_name)
         if file_path:
             with open(file_path, "rb") as f:
