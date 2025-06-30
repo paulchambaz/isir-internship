@@ -12,6 +12,7 @@ import math
 
 import numpy as np
 import torch
+import torch.distributions as dist
 from torch import nn
 
 from .replay import ReplayBuffer
@@ -152,9 +153,7 @@ class AFU(RLAlgo):
             if evaluation:
                 action = torch.tanh(mean)
             else:
-                raw_action = torch.distributions.Normal(
-                    mean, log_std.exp()
-                ).rsample()
+                raw_action = dist.Normal(mean, log_std.exp()).rsample()
                 action = torch.tanh(raw_action)
         return action.squeeze(0).numpy()
 
@@ -284,19 +283,10 @@ class AFU(RLAlgo):
     def _compute_policy_loss(
         self, states: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        mean, log_std = self.policy_network(states)
-        std = log_std.exp()
-        normal = torch.distributions.Normal(mean, std)
-        raw_action = normal.rsample()
-        actions = torch.tanh(raw_action)
+        actions, log_probs = self._compute_action_and_log_prob(states)
 
-        log_prob = normal.log_prob(raw_action) - torch.log(
-            torch.relu(1 - actions.pow(2)) + 1e-6
-        )
-        log_probs = log_prob.sum(dim=-1, keepdim=True)
-
-        q_values = self.q_network(states, actions)
-        q_value = q_values[-1]
+        q_values_list = self.q_network(states, actions)
+        q_value = q_values_list[-1]
 
         alpha = self.log_alpha.exp().detach()
         policy_loss = torch.mean(alpha * log_probs - q_value)
@@ -306,6 +296,25 @@ class AFU(RLAlgo):
         )
 
         return policy_loss, temperature_loss
+
+    def _compute_action_and_log_prob(
+        self, state: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        #  N(mu_theta (s), sigma_theta (s)^2)
+        mean, log_std = self.policy_network(state)
+        gaussian = dist.Normal(mean, log_std.exp())
+
+        # a = tanh(u), u ~ N
+        raw_action = gaussian.rsample()
+        action = torch.tanh(raw_action)
+
+        # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
+        log_prob_gaussian = gaussian.log_prob(raw_action)
+        clamped_action = torch.clamp(action, min=-1.0 + 1e-6, max=1.0 - 1e-6)
+        tanh_correction = torch.log1p(-(clamped_action**2))
+        log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
+
+        return action, log_prob
 
     class QNetwork(nn.Module):
         __slots__ = ["networks"]

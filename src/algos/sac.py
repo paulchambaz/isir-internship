@@ -286,23 +286,11 @@ class SAC(RLAlgo):
 
         # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
         log_prob_gaussian = gaussian.log_prob(raw_action)
-        eps = 1e-6
-        clamped_action = torch.clamp(action, min=-1.0 + eps, max=1.0 - eps)
+        clamped_action = torch.clamp(action, min=-1.0 + 1e-6, max=1.0 - 1e-6)
         tanh_correction = torch.log1p(-(clamped_action**2))
         log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
 
         return action, log_prob
-
-    # def _soft_update_targets(self) -> None:
-    #     with torch.no_grad():
-    #         for target_param, param in zip(
-    #             self.q_target_network.parameters(),
-    #             self.q_network.parameters(),
-    #             strict=True,
-    #         ):
-    #             target_param.data.copy_(
-    #                 self.tau * param + (1 - self.tau) * target_param.data
-    #             )
 
     class QNetwork(nn.Module):
         __slots__ = ["networks"]
