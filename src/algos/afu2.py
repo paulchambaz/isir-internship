@@ -699,8 +699,8 @@ class AFU(OffPolicyActorCritic):
         mix_gd_optim_values = (
             mix_case
             * (
-                jax.lax.stop_gradient((1 - grad_red) * optim_values)
-                + grad_red * optim_values
+                jax.lax.stop_gradient(grad_red * optim_values)
+                + (1 - grad_red) * optim_values
             )
             + (1 - mix_case) * optim_values
         )
