@@ -3,7 +3,7 @@
 
 # Run the main program
 run:
-  @uv run python -m tools.train --env mountaincar --steps 200000
+  @just train --env mountaincar --algo tqc
 
 # Run main training script
 train *ARGS:

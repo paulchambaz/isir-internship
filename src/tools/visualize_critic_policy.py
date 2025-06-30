@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from scipy.spatial import ConvexHull
+from torch import nn
 from tqdm import tqdm
 
 import algos
@@ -31,7 +32,9 @@ ACTION_MAX = 1.0
 GOAL_POSITION = 0.45
 
 
-def measure_trajectories(policy_net, n_episodes):
+def measure_trajectories(
+    policy_net: nn.Module, n_episodes: int
+) -> list[list[float]]:
     env = gym.make("MountainCarContinuous-v0")
 
     trajectories = []
@@ -81,7 +84,13 @@ def measure_trajectories(policy_net, n_episodes):
     return avg_trajectory
 
 
-def measure_max_q_values(algorithm, q_net, v_net, policy_net, grid_size):
+def measure_max_q_values(
+    algorithm: str,
+    q_net: nn.Module | None,
+    v_net: nn.Module | None,
+    policy_net: nn.Module,
+    grid_size: int,
+) -> np.ndarray:
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
 
@@ -111,7 +120,7 @@ def measure_max_q_values(algorithm, q_net, v_net, policy_net, grid_size):
     return max_q_values
 
 
-def measure_max_a(q_net, grid_size):
+def measure_max_a(q_net: nn.Module, grid_size: int) -> np.ndarray:
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
 
@@ -136,7 +145,13 @@ def measure_max_a(q_net, grid_size):
     return max_a_values
 
 
-def measure_v_values(algorithm, q1_net, q2_net, v_net, grid_size):
+def measure_v_values(
+    algorithm: str,
+    q1_net: nn.Module | None,
+    q2_net: nn.Module | None,
+    v_net: nn.Module | None,
+    grid_size: int,
+) -> np.ndarray:
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
 
@@ -171,7 +186,7 @@ def measure_v_values(algorithm, q1_net, q2_net, v_net, grid_size):
     return v_values
 
 
-def measure_actions(policy_net, grid_size):
+def measure_actions(policy_net: nn.Module, grid_size: int) -> np.ndarray:
     positions = np.linspace(POSITION_MIN, POSITION_MAX, grid_size)
     velocities = np.linspace(VELOCITY_MIN, VELOCITY_MAX, grid_size)
 
@@ -188,7 +203,9 @@ def measure_actions(policy_net, grid_size):
     return actions
 
 
-def get_replay_buffer_convex_hull(replay_positions, replay_velocities):
+def get_replay_buffer_convex_hull(
+    replay_positions: np.ndarray, replay_velocities: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     points = np.column_stack((replay_positions, replay_velocities))
 
     hull = ConvexHull(points)
@@ -198,7 +215,9 @@ def get_replay_buffer_convex_hull(replay_positions, replay_velocities):
     return hull_points[:, 0], hull_points[:, 1]
 
 
-def extract_replay_buffer_states(state_dict):
+def extract_replay_buffer_states(
+    state_dict: dict,
+) -> tuple[np.ndarray, np.ndarray]:
     replay_data = state_dict["replay_buffer"]
     states = np.array([transition[0] for transition in replay_data])
     positions = states[:, 0]
@@ -207,18 +226,18 @@ def extract_replay_buffer_states(state_dict):
 
 
 def display_visualization(
-    i,
-    algorithm,
-    v_values,
-    actions,
-    max_q_values,
-    max_a_values,
-    avg_trajectories,
-    replay_positions,
-    replay_velocities,
-    hull_pos,
-    hull_vel,
-):
+    i: int,
+    algorithm: str,
+    v_values: np.ndarray,
+    actions: np.ndarray,
+    max_q_values: np.ndarray,
+    max_a_values: np.ndarray,
+    avg_trajectories: np.ndarray,
+    replay_positions: np.ndarray,
+    replay_velocities: np.ndarray,
+    hull_pos: np.ndarray,
+    hull_vel: np.ndarray,
+) -> None:
     fig, axes = plt.subplots(2, 3, figsize=(22, 12))
     axes = axes.flatten()
     extent = [POSITION_MIN, POSITION_MAX, VELOCITY_MIN, VELOCITY_MAX]
@@ -355,7 +374,7 @@ def display_visualization(
     plt.close()
 
 
-def get_figure(i, state_dict, algorithm):
+def get_figure(i: int, state_dict: dict, algorithm: str) -> None:
     state_dim = 2
     action_dim = 1
     hidden_dims = [256, 256]

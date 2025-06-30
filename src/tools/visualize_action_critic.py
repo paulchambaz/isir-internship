@@ -9,6 +9,7 @@
 import argparse
 import gc
 import pickle
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -23,17 +24,20 @@ ACTION_MAX = 1.0
 
 COLORS = ["#6ca247", "#d66b6a", "#5591e1", "#39a985", "#ad75ca", "#c77c1e"]
 
-MAX_1 = 0
-MIN_1 = 0
-MAX_2 = 0
-MIN_2 = 0
-MAX_3 = 0
-MIN_3 = 0
+
+@dataclass
+class Bounds:
+    max_1: 0
+    min_1: 0
+    max_2: 0
+    min_2: 0
+    max_3: 0
+    min_3: 0
 
 
-def get_figure(i, state_dict, position, velocity) -> None:
-    global MAX_1, MIN_1, MAX_2, MIN_2, MAX_3, MIN_3
-
+def get_figure(
+    i: int, state_dict: dict, position: float, velocity: float, bounds: Bounds
+) -> None:
     state_dim = 2
     action_dim = 1
     hidden_dims = [256, 256]
@@ -84,13 +88,13 @@ def get_figure(i, state_dict, position, velocity) -> None:
     target_min_3 = a_values.min()
 
     lerp_factor = 0.5
-    if MAX_1 == 0 and MIN_1 == 0:
-        MAX_1 = q_values.max()
-        MIN_1 = q_values.min()
-        MAX_2 = max(q_values.max(), v_value, (v_value + a_values).max())
-        MIN_2 = min(q_values.min(), v_value, (v_value + a_values).min())
-        MAX_3 = a_values.max()
-        MIN_3 = a_values.min()
+    if bounds.max_1 == 0 and bounds.min_1 == 0:
+        bounds.max_1 = q_values.max()
+        bounds.min_1 = q_values.min()
+        bounds.max_2 = max(q_values.max(), v_value, (v_value + a_values).max())
+        bounds.min_2 = min(q_values.min(), v_value, (v_value + a_values).min())
+        bounds.max_3 = a_values.max()
+        bounds.min_3 = a_values.min()
     else:
         target_max_1 = q_values.max()
         target_min_1 = q_values.min()
@@ -110,23 +114,29 @@ def get_figure(i, state_dict, position, velocity) -> None:
         target_max_3 += range_3 * 0.1
         target_min_3 -= range_3 * 0.1
 
-        MAX_1 = max(
-            MAX_1 * (1 - lerp_factor) + target_max_1 * lerp_factor, target_max_1
+        bounds.max_1 = max(
+            bounds.max_1 * (1 - lerp_factor) + target_max_1 * lerp_factor,
+            target_max_1,
         )
-        MIN_1 = min(
-            MIN_1 * (1 - lerp_factor) + target_min_1 * lerp_factor, target_min_1
+        bounds.min_1 = min(
+            bounds.min_1 * (1 - lerp_factor) + target_min_1 * lerp_factor,
+            target_min_1,
         )
-        MAX_2 = max(
-            MAX_2 * (1 - lerp_factor) + target_max_2 * lerp_factor, target_max_2
+        bounds.max_2 = max(
+            bounds.max_2 * (1 - lerp_factor) + target_max_2 * lerp_factor,
+            target_max_2,
         )
-        MIN_2 = min(
-            MIN_2 * (1 - lerp_factor) + target_min_2 * lerp_factor, target_min_2
+        bounds.min_2 = min(
+            bounds.min_2 * (1 - lerp_factor) + target_min_2 * lerp_factor,
+            target_min_2,
         )
-        MAX_3 = max(
-            MAX_3 * (1 - lerp_factor) + target_max_3 * lerp_factor, target_max_3
+        bounds.max_3 = max(
+            bounds.max_3 * (1 - lerp_factor) + target_max_3 * lerp_factor,
+            target_max_3,
         )
-        MIN_3 = min(
-            MIN_3 * (1 - lerp_factor) + target_min_3 * lerp_factor, target_min_3
+        bounds.min_3 = min(
+            bounds.min_3 * (1 - lerp_factor) + target_min_3 * lerp_factor,
+            target_min_3,
         )
 
     fig = plt.figure(figsize=(14, 8))
@@ -149,7 +159,7 @@ def get_figure(i, state_dict, position, velocity) -> None:
     axes[0].plot([], [], color=COLORS[4], linewidth=2, label=r"$A(s,a)$")
     axes[0].scatter(
         [mode_action],
-        [MIN_1 + (MAX_1 - MIN_1) * 0.02],
+        [bounds.min_1 + (bounds.max_1 - bounds.min_1) * 0.02],
         color=COLORS[5],
         s=100,
         zorder=5,
@@ -157,7 +167,7 @@ def get_figure(i, state_dict, position, velocity) -> None:
     )
     axes[0].scatter(
         [policy_action],
-        [MIN_1 + (MAX_1 - MIN_1) * 0.02],
+        [bounds.min_1 + (bounds.max_1 - bounds.min_1) * 0.02],
         color=COLORS[3],
         s=100,
         zorder=5,
@@ -168,28 +178,36 @@ def get_figure(i, state_dict, position, velocity) -> None:
     axes[0].set_title("Q-values")
     axes[0].grid(visible=True, alpha=0.25)
     axes[0].legend(loc="upper left")
-    axes[0].set_ylim(MIN_1, MAX_1)
+    axes[0].set_ylim(bounds.min_1, bounds.max_1)
 
     axes[1].plot(actions, q_values, color=COLORS[0], linewidth=4)
     axes[1].axhline(y=v_value, color=COLORS[1], linewidth=2)
     axes[1].plot(actions, v_value + a_values, color=COLORS[2], linewidth=2)
-    axes[1].scatter([mode_action], [MIN_2], color=COLORS[5], s=100, zorder=5)
-    axes[1].scatter([policy_action], [MIN_2], color=COLORS[3], s=100, zorder=5)
+    axes[1].scatter(
+        [mode_action], [bounds.min_2], color=COLORS[5], s=100, zorder=5
+    )
+    axes[1].scatter(
+        [policy_action], [bounds.min_2], color=COLORS[3], s=100, zorder=5
+    )
     axes[1].set_xlabel("Action")
     axes[1].set_ylabel("Value")
     axes[1].set_title("Q = V + A")
     axes[1].grid(visible=True, alpha=0.25)
-    axes[1].set_ylim(MIN_2, MAX_2)
+    axes[1].set_ylim(bounds.min_2, bounds.max_2)
 
     axes[2].plot(actions, a_values, color=COLORS[4], linewidth=2)
     axes[2].axhline(y=0, color="k", linestyle="-", alpha=0.3)
-    axes[2].scatter([mode_action], [MIN_3], color=COLORS[5], s=100, zorder=5)
-    axes[2].scatter([policy_action], [MIN_3], color=COLORS[3], s=100, zorder=5)
+    axes[2].scatter(
+        [mode_action], [bounds.min_3], color=COLORS[5], s=100, zorder=5
+    )
+    axes[2].scatter(
+        [policy_action], [bounds.min_3], color=COLORS[3], s=100, zorder=5
+    )
     axes[2].set_xlabel("Action")
     axes[2].set_ylabel(r"$A(s, a)$")
     axes[2].set_title("Advantage")
     axes[2].grid(visible=True, alpha=0.25)
-    axes[2].set_ylim(MIN_3, max(0, MAX_3))
+    axes[2].set_ylim(bounds.min_3, max(0, bounds.max_3))
 
     path = "outputs/mountaincar_action_critic"
     Path(path).mkdir(exist_ok=True)
@@ -243,8 +261,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    checkpoint_files = sorted(Path(args.file).glob("agent_history_*.pk"))
+    checkpoint_files = sorted(
+        Path(args.file).glob("agent_history_*.pk"),
+        key=lambda p: int(p.stem.split("_")[-1]),
+    )
     total_states = len(checkpoint_files) * 100
+
+    bounds = Bounds()
 
     with tqdm(total=total_states) as pbar:
         for checkpoint_file in checkpoint_files:
@@ -252,7 +275,7 @@ def main() -> None:
                 partial_history = pickle.load(f)  # noqa: S301
 
             for i, state_dict in partial_history.items():
-                get_figure(i, state_dict, args.position, args.velocity)
+                get_figure(i, state_dict, args.position, args.velocity, bounds)
                 pbar.update(1)
 
             del partial_history

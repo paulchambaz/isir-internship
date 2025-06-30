@@ -19,62 +19,6 @@ from .utils import soft_update_target
 
 
 class TQC(Algo):
-    class ZNetwork(nn.Module):
-        __slots__ = ["networks"]
-
-        def __init__(
-            self,
-            state_dim: int,
-            hidden_dims: list[int],
-            action_dim: int,
-            n_quantiles: int,
-            n_critics: int,
-        ) -> None:
-            super().__init__()
-            self.networks = nn.ModuleList()
-
-            for _ in range(n_critics):
-                layers = [
-                    nn.Linear(state_dim + action_dim, hidden_dims[0]),
-                    nn.ReLU(),
-                ]
-                for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                    layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-                layers.append(nn.Linear(hidden_dims[-1], n_quantiles))
-
-                self.networks.append(nn.Sequential(*layers))
-
-        def forward(
-            self, state: torch.Tensor, action: torch.Tensor
-        ) -> torch.Tensor:
-            state_action = torch.cat([state, action], dim=1)
-            return torch.stack(
-                [network(state_action) for network in self.networks], dim=1
-            )
-
-    class PolicyNetwork(nn.Module):
-        __slots__ = ["action_dim", "model"]
-
-        def __init__(
-            self, state_dim: int, hidden_dims: list[int], action_dim: int
-        ) -> None:
-            super().__init__()
-            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-            for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
-
-            self.model = nn.Sequential(*layers)
-            self.action_dim = action_dim
-
-        def forward(
-            self, state: torch.Tensor
-        ) -> tuple[torch.Tensor, torch.Tensor]:
-            output = self.model(state)
-            mean, log_std = torch.split(output, self.action_dim, dim=-1)
-            log_std = torch.clamp(log_std, -20, 2)
-            return mean, log_std
-
     __slots__ = [
         "action_dim",
         "batch_size",
@@ -122,7 +66,7 @@ class TQC(Algo):
         self.learn_temperature = alpha is None
 
         self.z_network = self.ZNetwork(
-            state, hidden_dims, action_dim, n_quantiles, n_critics
+            state_dim, hidden_dims, action_dim, n_quantiles, n_critics
         )
         self.z_target_network = self.ZNetwork(
             state_dim, hidden_dims, action_dim, n_quantiles, n_critics
@@ -353,3 +297,59 @@ class TQC(Algo):
 
         weighted_loss = weights * huber
         return weighted_loss.mean()
+
+    class ZNetwork(nn.Module):
+        __slots__ = ["networks"]
+
+        def __init__(
+            self,
+            state_dim: int,
+            hidden_dims: list[int],
+            action_dim: int,
+            n_quantiles: int,
+            n_critics: int,
+        ) -> None:
+            super().__init__()
+            self.networks = nn.ModuleList()
+
+            for _ in range(n_critics):
+                layers = [
+                    nn.Linear(state_dim + action_dim, hidden_dims[0]),
+                    nn.ReLU(),
+                ]
+                for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                    layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+                layers.append(nn.Linear(hidden_dims[-1], n_quantiles))
+
+                self.networks.append(nn.Sequential(*layers))
+
+        def forward(
+            self, state: torch.Tensor, action: torch.Tensor
+        ) -> torch.Tensor:
+            state_action = torch.cat([state, action], dim=1)
+            return torch.stack(
+                [network(state_action) for network in self.networks], dim=1
+            )
+
+    class PolicyNetwork(nn.Module):
+        __slots__ = ["action_dim", "model"]
+
+        def __init__(
+            self, state_dim: int, hidden_dims: list[int], action_dim: int
+        ) -> None:
+            super().__init__()
+            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
+            for in_dim, out_dim in itertools.pairwise(hidden_dims):
+                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
+
+            self.model = nn.Sequential(*layers)
+            self.action_dim = action_dim
+
+        def forward(
+            self, state: torch.Tensor
+        ) -> tuple[torch.Tensor, torch.Tensor]:
+            output = self.model(state)
+            mean, log_std = torch.split(output, self.action_dim, dim=-1)
+            log_std = torch.clamp(log_std, -20, 2)
+            return mean, log_std
