@@ -289,8 +289,8 @@ class AFU(RLAlgo):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         actions, log_probs = self._compute_action_and_log_prob(states)
 
-        q_values_list = self.q_network(states, actions)
-        q_value = q_values_list[-1]
+        q_values = self.q_network(states, actions)
+        q_value = q_values[-1]
 
         alpha = self.log_alpha.exp().detach()
         policy_loss = torch.mean(alpha * log_probs - q_value)
@@ -312,9 +312,9 @@ class AFU(RLAlgo):
         raw_action = gaussian.rsample()
         action = torch.tanh(raw_action)
 
+        # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
         log_prob_gaussian = gaussian.log_prob(raw_action)
-        clamped_action = torch.relu(1.0 - action**2) + 1e-6
-        tanh_correction = torch.log(clamped_action)
+        tanh_correction = torch.log(torch.relu(1 - action.pow(2)) + 1e-6)
         log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
 
         return action, log_prob
