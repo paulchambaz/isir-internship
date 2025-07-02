@@ -159,12 +159,6 @@ class SAC(RLAlgo):
             self.replay_buffer.sample(self.batch_size)
         )
 
-        if self.learn_temperature:
-            temperature_loss = self._compute_temperature_loss(states)
-            self.temperature_optimizer.zero_grad()
-            temperature_loss.backward()
-            self.temperature_optimizer.step()
-
         q_loss = self._compute_q_loss(
             states, actions, rewards, next_states, dones
         )
@@ -174,10 +168,16 @@ class SAC(RLAlgo):
 
         soft_update_target(self.q_target_network, self.q_network, self.tau)
 
-        policy_loss = self._compute_policy_loss(states)
+        policy_loss, temperature_loss = self._compute_policy_loss(states)
+
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()
+
+        if self.learn_temperature:
+            self.temperature_optimizer.zero_grad()
+            temperature_loss.backward()
+            self.temperature_optimizer.step()
 
     def get_state(self) -> dict:
         """
@@ -250,7 +250,9 @@ class SAC(RLAlgo):
 
         return sum(q_losses)
 
-    def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:
+    def _compute_policy_loss(
+        self, states: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # pi(s) log pi (pi(s) | s)
         actions, log_probs = self._compute_action_and_log_prob(states)
 
@@ -260,16 +262,14 @@ class SAC(RLAlgo):
 
         # EE [ alpha log pi (a | s) - Q (s, a) ]
         alpha = self.log_alpha.exp()
-        return torch.mean(alpha * log_probs - q_values)
-
-    def _compute_temperature_loss(self, states: torch.Tensor) -> torch.Tensor:
-        # log pi (pi(s) | s)
-        _, log_probs = self._compute_action_and_log_prob(states)
+        policy_loss = torch.mean(alpha * log_probs - q_values)
 
         # EE [ -alpha (log pi (a | s) + H) ]
-        return torch.mean(
+        temperature_loss = torch.mean(
             -self.log_alpha * (log_probs.detach() + self.target_entropy)
         )
+
+        return policy_loss, temperature_loss
 
     def _compute_action_and_log_prob(
         self, state: torch.Tensor

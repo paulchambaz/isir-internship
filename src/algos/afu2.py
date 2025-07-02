@@ -679,7 +679,6 @@ class AFU(OffPolicyActorCritic):
         target_q = jax.lax.stop_gradient(
             reward + (1.0 - done) * self.discount * target_optim_values
         )
-        # target_q += 0.5 * jax.random.normal(kwargs["key"], shape=target_q.shape)
 
         optim_values = jnp.asarray(self.value.apply(params_value, state))
 

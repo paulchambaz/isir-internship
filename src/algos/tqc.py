@@ -266,8 +266,7 @@ class TQC(RLAlgo):
 
         # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
         log_prob_gaussian = gaussian.log_prob(raw_action)
-        eps = torch.finfo(action.dtype).eps
-        clamped_action = torch.clamp(action, min=-1.0 + eps, max=1.0 - eps)
+        clamped_action = torch.clamp(action, min=-1.0 + 1e-6, max=1.0 - 1e-6)
         tanh_correction = torch.log1p(-(clamped_action**2))
         log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
 
