@@ -520,11 +520,12 @@ class AFU(OffPolicyActorCritic):
         weight, batch = self.buffer.sample(self.batch_size)
         state, action, reward, done, next_state = batch
 
+        # Update critic and value networks together
         (loss_critic, critic_aux), grad = jax.value_and_grad(
             self._loss_critic, argnums=(0, 1), has_aux=True
         )(
-            params_critic=self.params_critic,
-            params_value=self.params_value,
+            self.params_critic,
+            self.params_value,
             params_value_target=self.params_value_target,
             state=state,
             action=action,
@@ -544,6 +545,11 @@ class AFU(OffPolicyActorCritic):
             grad[1], self.opt_state_value
         )
         self.params_value = optix.apply_updates(self.params_value, update2)
+
+        # Update actor
+        # (loss_actor, mean_log_pi), grad = jax.value_and_grad(self.
+
+        # Update alpha
 
         @partial(jax.jit, static_argnums=(0, 1, 4))
         def optimize(
