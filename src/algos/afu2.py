@@ -520,56 +520,12 @@ class AFU(OffPolicyActorCritic):
         weight, batch = self.buffer.sample(self.batch_size)
         state, action, reward, done, next_state = batch
 
-        @partial(jax.jit, static_argnums=(0, 1, 4, 7))
-        def optimize_two_models(
-            fn_loss: Any,
-            opt: Any,
-            opt_state: Any,
-            params_to_update: hk.Params,
-            opt2: Any,
-            opt_state2: Any,
-            params_to_update2: hk.Params,
-            *args,
-            **kwargs,
-        ) -> tuple[Any, hk.Params, Any, hk.Params, jnp.ndarray, Any]:
-            (loss, aux), grad = jax.value_and_grad(
-                fn_loss, argnums=(0, 1), has_aux=True
-            )(
-                params_to_update,
-                params_to_update2,
-                *args,
-                **kwargs,
-            )
-            update, opt_state = opt(grad[0], opt_state)
-            params_to_update = optix.apply_updates(params_to_update, update)
-            update2, opt_state2 = opt2(grad[1], opt_state2)
-            params_to_update2 = optix.apply_updates(params_to_update2, update2)
-            return (
-                opt_state,
-                params_to_update,
-                opt_state2,
-                params_to_update2,
-                loss,
-                aux,
-            )
-
-        # Update critic.
-        (
-            self.opt_state_critic,
-            self.params_critic,
-            self.opt_state_value,
-            self.params_value,
-            loss_critic,
-            critic_aux,
-        ) = optimize_two_models(
-            self._loss_critic,
-            self.opt_critic,
-            self.opt_state_critic,
-            self.params_critic,
-            self.opt_value,
-            self.opt_state_value,
-            self.params_value,
-            params_value_target=self.params_value_target,
+        (loss_critic, critic_aux), grad = jax.value_and_grad(
+            self._loss_critic, argnums=(0, 1), has_aux=True
+        )(
+            params_critic=self.params_critic,
+            params_value=self.params_value,
+            params_value_target=self.params.value_target,
             state=state,
             action=action,
             reward=reward,
@@ -579,6 +535,15 @@ class AFU(OffPolicyActorCritic):
             gradient_reduction=self.gradient_reduction,
             **self.kwargs_critic,
         )
+
+        update, self.opt_state_critic = self.opt_critic(
+            grad[0], self.opt_state_critic
+        )
+        self.params_critic = optix.apply_updates(self.params_critic, update)
+        update2, self.opt_state_value = self.opt_value(
+            grad[1], self.opt_state_value
+        )
+        self.params_value = optix.apply_updates(self.params_value, update2)
 
         @partial(jax.jit, static_argnums=(0, 1, 4))
         def optimize(
@@ -683,8 +648,6 @@ class AFU(OffPolicyActorCritic):
 
         q_values = self.critic.apply(params_critic, state, action)
         q_final = jnp.asarray(q_values[-1:])
-        # TODO: test like this
-        # q_final = jnp.asarray(q_values[-1])
 
         abs_td = jnp.abs(q_targets - q_final)
         q_loss = (abs_td**2).mean()
