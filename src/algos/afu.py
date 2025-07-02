@@ -254,7 +254,7 @@ class AFU(RLAlgo):
         optim_values = torch.stack(v_values)
 
         q_values = self.q_network(states, actions)
-        q_final = q_values[-1].squeeze(-1)
+        q_final = q_values[-1]
 
         q_loss = torch.mean((q_targets - q_final) ** 2)
 
@@ -291,7 +291,7 @@ class AFU(RLAlgo):
         q_value = q_values[-1]
 
         alpha = self.log_alpha.exp().detach()
-        policy_loss = alpha * log_probs.mean() - q_value.mean()
+        policy_loss = torch.mean(alpha * log_probs - q_value)
 
         temperature_loss = torch.mean(
             -self.log_alpha * (log_probs.detach() + self.target_entropy)
@@ -348,7 +348,9 @@ class AFU(RLAlgo):
             self, state: torch.Tensor, action: torch.Tensor
         ) -> list[torch.Tensor]:
             state_action = torch.cat([state, action], dim=1)
-            return [network(state_action) for network in self.networks]
+            return [
+                network(state_action).squeeze(-1) for network in self.networks
+            ]
 
     class VNetwork(nn.Module):
         __slots__ = ["networks"]
@@ -372,7 +374,7 @@ class AFU(RLAlgo):
                 self.networks.append(nn.Sequential(*layers))
 
         def forward(self, state: torch.Tensor) -> list[torch.Tensor]:
-            return [network(state) for network in self.networks]
+            return [network(state).squeeze(-1) for network in self.networks]
 
     class PolicyNetwork(nn.Module):
         __slots__ = ["log_std_max", "log_std_min", "network"]
