@@ -525,7 +525,7 @@ class AFU(OffPolicyActorCritic):
         )(
             params_critic=self.params_critic,
             params_value=self.params_value,
-            params_value_target=self.params.value_target,
+            params_value_target=self.params_value_target,
             state=state,
             action=action,
             reward=reward,
