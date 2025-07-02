@@ -291,7 +291,7 @@ class AFU(RLAlgo):
         q_value = q_values[-1]
 
         alpha = self.log_alpha.exp().detach()
-        policy_loss = torch.mean(alpha * log_probs - q_value)
+        policy_loss = alpha * log_probs.mean() - q_value.mean()
 
         temperature_loss = torch.mean(
             -self.log_alpha * (log_probs.detach() + self.target_entropy)
