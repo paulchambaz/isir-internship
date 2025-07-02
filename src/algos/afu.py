@@ -248,10 +248,10 @@ class AFU(RLAlgo):
         with torch.no_grad():
             next_v_values = self.v_target_network(next_states)
             v_targets = torch.min(torch.stack(next_v_values), dim=0)[0]
-            q_targets = rewards + self.gamma * (1 - dones.float()) * v_targets
 
-        v_values = self.v_network(states)
-        optim_values = torch.stack(v_values)
+            q_targets = rewards + self.gamma * (1.0 - dones.float()) * v_targets
+
+        v_values = torch.stack(self.v_network(states))
 
         q_values = self.q_network(states, actions)
         q_final = q_values[-1]
@@ -261,17 +261,17 @@ class AFU(RLAlgo):
         optim_advantages = -torch.stack(q_values[:-1])
 
         mix_case = (
-            (optim_values + optim_advantages < q_targets.unsqueeze(0))
+            (v_values + optim_advantages < q_targets.unsqueeze(0))
             .detach()
             .float()
         )
         upsilon_values = (
             1 - self.rho * mix_case
-        ) * optim_values + self.rho * mix_case * optim_values.detach()
+        ) * v_values + self.rho * mix_case * v_values.detach()
 
         target_diff = upsilon_values - q_targets.unsqueeze(0)
 
-        up_case = (optim_values >= q_targets.unsqueeze(0)).detach().float()
+        up_case = (v_values >= q_targets.unsqueeze(0)).detach().float()
         z_values = (
             optim_advantages**2
             + up_case * 2 * optim_advantages * target_diff

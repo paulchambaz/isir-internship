@@ -672,39 +672,46 @@ class AFU(OffPolicyActorCritic):
         *args,
         **kwargs,
     ) -> tuple[jnp.ndarray, dict]:
-        target_optim_values = jnp.min(
-            jnp.asarray(self.value.apply(params_value_target, next_state)),
-            axis=0,
+        next_v_values = self.value.apply(params_value_target, next_state)
+        v_targets = jnp.min(jnp.asarray(next_v_values), axis=0)
+
+        q_targets = jax.lax.stop_gradient(
+            reward + self.discount * (1.0 - done) * v_targets
         )
-        target_q = jax.lax.stop_gradient(
-            reward + (1.0 - done) * self.discount * target_optim_values
-        )
 
-        optim_values = jnp.asarray(self.value.apply(params_value, state))
+        v_values = jnp.asarray(self.value.apply(params_value, state))
 
-        critic = self._calculate_value_list(params_critic, state, action)
-        q_values = jnp.asarray(critic[-1:])
-        grad_red = gradient_reduction
+        q_values = self.critic.apply(params_critic, state, action)
+        q_final = jnp.asarray(q_values[-1:])
+        # TODO: test like this
+        # q_final = jnp.asarray(q_values[-1])
 
-        optim_advantages = -jnp.asarray(critic[:-1])
+        abs_td = jnp.abs(q_targets - q_final)
+        q_loss = (abs_td**2).mean()
+
+        rho = gradient_reduction
+
+        optim_advantages = -jnp.asarray(q_values[:-1])
+
         mix_case = jax.lax.stop_gradient(
-            optim_values + optim_advantages < target_q
+            v_values + optim_advantages < q_targets
         )
-        mix_gd_optim_values = optim_values * (
-            1 - mix_case * grad_red
-        ) + jax.lax.stop_gradient(optim_values) * (mix_case * grad_red)
-        up_case = jax.lax.stop_gradient(target_q <= optim_values)
+        upsilon_values = (
+            1 - rho * mix_case
+        ) * v_values + rho * mix_case * jax.lax.stop_gradient(v_values)
 
-        loss_critic = (
+        up_case = jax.lax.stop_gradient(v_values >= q_targets)
+        z_values = (
             optim_advantages**2
-            + up_case * 2 * optim_advantages * (mix_gd_optim_values - target_q)
-            + (mix_gd_optim_values - target_q) ** 2
-        ).mean()
+            + up_case * 2 * optim_advantages * (upsilon_values - q_targets)
+            + (upsilon_values - q_targets) ** 2
+        )
 
-        abs_td = jnp.abs(target_q - q_values)
-        loss_critic += (abs_td**2).mean()
-        loss_critic *= weight
-        return (loss_critic, {"abs_td": jax.lax.stop_gradient(abs_td)})
+        va_loss = z_values.mean()
+
+        critic_loss = va_loss + q_loss
+
+        return (critic_loss, {"abs_td": jax.lax.stop_gradient(abs_td)})
 
     @partial(jax.jit, static_argnums=0)
     def _loss_actor(
