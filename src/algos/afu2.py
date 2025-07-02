@@ -541,73 +541,48 @@ class AFU(OffPolicyActorCritic):
             grad[0], self.opt_state_critic
         )
         self.params_critic = optix.apply_updates(self.params_critic, update)
-        update2, self.opt_state_value = self.opt_value(
+        update, self.opt_state_value = self.opt_value(
             grad[1], self.opt_state_value
         )
-        self.params_value = optix.apply_updates(self.params_value, update2)
+        self.params_value = optix.apply_updates(self.params_value, update)
 
         # Update actor
-        # (loss_actor, mean_log_pi), grad = jax.value_and_grad(self.
-
-        # Update alpha
-
-        @partial(jax.jit, static_argnums=(0, 1, 4))
-        def optimize(
-            fn_loss: Any,
-            opt: Any,
-            opt_state: Any,
-            params_to_update: hk.Params,
-            *args,
-            **kwargs,
-        ) -> tuple[Any, hk.Params, jnp.ndarray, Any]:
-            (loss, aux), grad = jax.value_and_grad(fn_loss, has_aux=True)(
-                params_to_update,
-                *args,
-                **kwargs,
-            )
-            update, opt_state = opt(grad, opt_state)
-            params_to_update = optix.apply_updates(params_to_update, update)
-            return opt_state, params_to_update, loss, aux
-
-        # Update actor.
-        self.opt_state_actor, self.params_actor, loss_actor, mean_log_pi = (
-            optimize(
-                self._loss_actor,
-                self.opt_actor,
-                self.opt_state_actor,
-                self.params_actor,
-                params_critic=self.params_critic,
-                params_value=self.params_value,
-                log_alpha=self.log_alpha,
-                state=state,
-                action=action,
-                **self.kwargs_actor,
-            )
+        (loss_actor, mean_log_pi), grad = jax.value_and_grad(
+            self._loss_actor, has_aux=True
+        )(
+            self.params_actor,
+            params_critic=self.params_critic,
+            params_value=self.params_value,
+            log_alpha=self.log_alpha,
+            state=state,
+            action=action,
+            **self.kwargs_actor,
         )
 
-        # Update alpha.
-        self.opt_state_alpha, self.log_alpha, loss_alpha, _ = optimize(
-            self._loss_alpha,
-            self.opt_alpha,
-            self.opt_state_alpha,
+        update, self.opt_state_actor = self.opt_actor(
+            grad, self.opt_state_actor
+        )
+        self.params_actor = optix.apply_updates(self.params_actor, update)
+
+        # Update alpha
+        (loss_alpha, _), grad = jax.value_and_grad(
+            self._loss_alpha, has_aux=True
+        )(
             self.log_alpha,
             mean_log_pi=mean_log_pi,
         )
+        update, self.opt_state_alpha = self.opt_alpha(
+            grad, self.opt_state_alpha
+        )
+        self.log_alpha = optix.apply_updates(self.log_alpha, update)
 
         # Update target network.
-        if not self.learning_step % self.target_update_period:
-            self.params_critic_target = self._update_target(
-                self.params_critic_target, self.params_critic
-            )
-            self.params_value_target = self._update_target(
-                self.params_value_target, self.params_value
-            )
-
-        self.info_dict["log_alpha"] = self.log_alpha
-        self.info_dict["entropy"] = -mean_log_pi
-        self.info_dict["loss/critic"] = loss_critic
-        self.info_dict["loss/actor"] = loss_actor
-        self.info_dict["loss/alpha"] = loss_alpha
+        self.params_critic_target = self._update_target(
+            self.params_critic_target, self.params_critic
+        )
+        self.params_value_target = self._update_target(
+            self.params_value_target, self.params_value
+        )
 
     @partial(jax.jit, static_argnums=0)
     def _sample_action(
