@@ -18,4 +18,4 @@ from .sac import SAC
 from .simple_right import SimpleRight
 from .tqc import TQC
 
-__all__ = ["AFU", "AFUP", "SAC", "TQC", "Algo", "SimpleRight"]
+__all__ = ["AFU", "AFUP", "SAC", "TQC", "Algo", "RLAlgo", "SimpleRight"]

@@ -23,7 +23,5 @@ class SimpleRight:
         self.action_dim = action_dim
         self.direction = direction
 
-    def select_action(
-        self, state: np.ndarray, *, evaluation: bool = False
-    ) -> np.ndarray:
+    def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
         return np.full(self.action_dim, self.direction)

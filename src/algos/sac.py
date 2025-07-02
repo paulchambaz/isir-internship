@@ -118,9 +118,7 @@ class SAC(RLAlgo):
         if state is not None:
             self.load_from_state(state)
 
-    def select_action(
-        self, state: np.ndarray, *, evaluation: bool
-    ) -> np.ndarray:
+    def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
         """
         Selects an action in range [-1, 1] using deterministic mean
         (evaluation=True) or stochastic sampling (evaluation=False).
@@ -145,7 +143,7 @@ class SAC(RLAlgo):
         action: np.ndarray,
         reward: float,
         next_state: np.ndarray,
-        done: bool,  # noqa: FBT001
+        done: bool,
     ) -> None:
         self.replay_buffer.push(state, action, reward, next_state, done)
 

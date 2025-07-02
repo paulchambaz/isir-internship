@@ -378,19 +378,14 @@ class StateDependentGaussianPolicyExtra(hk.Module):
 
     def __call__(self, x):
         x = MLP(
-            3 * self.action_space.shape[0],
+            2 * self.action_space.shape[0],
             self.hidden_units,
             hidden_activation=nn.relu,
             hidden_scale=np.sqrt(2),
         )(x)
-        mean, log_std, extra_loc = jnp.split(x, 3, axis=1)
-        if self.clip_log_std:
-            log_std = jnp.clip(log_std, self.log_std_min, self.log_std_max)
-        else:
-            log_std = self.log_std_min + 0.5 * (
-                self.log_std_max - self.log_std_min
-            ) * (jnp.tanh(log_std) + 1.0)
-        return mean, log_std, extra_loc
+        mean, log_std = jnp.split(x, 2, axis=1)
+        log_std = jnp.clip(log_std, self.log_std_min, self.log_std_max)
+        return mean, log_std
 
 
 class AFU(OffPolicyActorCritic):
@@ -497,7 +492,7 @@ class AFU(OffPolicyActorCritic):
         params_actor: hk.Params,
         state: np.ndarray,
     ) -> jnp.ndarray:
-        mean, _, _ = self.actor.apply(params_actor, state)
+        mean, _ = self.actor.apply(params_actor, state)
         return jnp.tanh(mean)
 
     @partial(jax.jit, static_argnums=0)
@@ -507,7 +502,7 @@ class AFU(OffPolicyActorCritic):
         state: np.ndarray,
         key: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mean, log_std, _ = self.actor.apply(params_actor, state)
+        mean, log_std = self.actor.apply(params_actor, state)
         return reparameterize_gaussian_and_tanh(mean, log_std, key, False)
 
     def select_action(self, state):
@@ -650,7 +645,7 @@ class AFU(OffPolicyActorCritic):
         state: np.ndarray,
         key: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mean, log_std, _ = self.actor.apply(params_actor, state)
+        mean, log_std = self.actor.apply(params_actor, state)
         return reparameterize_gaussian_and_tanh(mean, log_std, key, True)
 
     @partial(jax.jit, static_argnums=0)
@@ -730,8 +725,7 @@ class AFU(OffPolicyActorCritic):
         *args,
         **kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mean, log_std, extra_loc = self.actor.apply(params_actor, state)
-        extra_loc = jnp.clip(extra_loc, -1.0, 1.0)
+        mean, log_std = self.actor.apply(params_actor, state)
         sampled_action, log_pi = reparameterize_gaussian_and_tanh(
             mean, log_std, kwargs["key"], True
         )

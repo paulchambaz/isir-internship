@@ -82,6 +82,7 @@ ignore = [
   "PLR0915", # Too many statements
   "BLE001",  # Do not catch blind exception
   "COM812",  # Avoid conflicts with formatter
+  "FBT001",  # Can use boolean in function arguments
 ]
 
 [tool.ruff.format]

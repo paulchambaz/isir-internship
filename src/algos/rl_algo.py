@@ -17,9 +17,7 @@ class RLAlgo(ABC):
         pass
 
     @abstractmethod
-    def select_action(
-        self, state: np.ndarray, *, evaluation: bool
-    ) -> np.ndarray:
+    def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
         pass
 
     @abstractmethod
@@ -29,7 +27,7 @@ class RLAlgo(ABC):
         action: np.ndarray,
         reward: float,
         next_state: np.ndarray,
-        done: bool,  # noqa: FBT001
+        done: bool,
     ) -> None:
         pass
 
