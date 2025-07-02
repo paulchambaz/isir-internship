@@ -688,17 +688,11 @@ class AFU(OffPolicyActorCritic):
 
         optim_advantages = -jnp.asarray(critic[:-1])
         mix_case = jax.lax.stop_gradient(
-            target_q > optim_values + optim_advantages
+            optim_values + optim_advantages < target_q
         )
-        mix_gd_optim_values = (
-            mix_case
-            * (
-                jax.lax.stop_gradient(grad_red * optim_values)
-                + (1 - grad_red) * optim_values
-            )
-            + (1 - mix_case) * optim_values
-        )
-
+        mix_gd_optim_values = optim_values * (
+            1 - mix_case * grad_red
+        ) + jax.lax.stop_gradient(optim_values) * (mix_case * grad_red)
         up_case = jax.lax.stop_gradient(target_q <= optim_values)
 
         loss_critic = (
