@@ -1,7 +1,6 @@
 # afu2.py
 
 import math
-from abc import abstractmethod
 from functools import partial
 from typing import Any
 
@@ -10,13 +9,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax as optix
-from gymnasium.spaces import Box, Discrete
+from gymnasium import Env
 from haiku import PRNGSequence
 from jax import nn
 
 
 @jax.jit
-def soft_update(
+def _soft_update(
     target_params: hk.Params,
     online_params: hk.Params,
     tau: float,
@@ -26,19 +25,8 @@ def soft_update(
     )
 
 
-def fake_state(state_space):
-    state = state_space.sample()[None, ...]
-    if len(state_space.shape) == 1:
-        state = state.astype(np.float32)
-    return state
-
-
-def fake_action(action_space):
-    return action_space.sample().astype(np.float32)[None, ...]
-
-
 @jax.jit
-def gaussian_log_prob(
+def _gaussian_log_prob(
     log_std: jnp.ndarray,
     noise: jnp.ndarray,
 ) -> jnp.ndarray:
@@ -46,28 +34,28 @@ def gaussian_log_prob(
 
 
 @jax.jit
-def gaussian_and_tanh_log_prob(
+def _gaussian_and_tanh_log_prob(
     log_std: jnp.ndarray,
     noise: jnp.ndarray,
     action: jnp.ndarray,
 ) -> jnp.ndarray:
-    return gaussian_log_prob(log_std, noise) - jnp.log(
+    return _gaussian_log_prob(log_std, noise) - jnp.log(
         nn.relu(1.0 - jnp.square(action)) + 1e-6
     )
 
 
 @partial(jax.jit, static_argnums=3)
-def reparameterize_gaussian_and_tanh(
+def _reparameterize_gaussian_and_tanh(
     mean: jnp.ndarray,
     log_std: jnp.ndarray,
     key: jnp.ndarray,
-    return_log_pi: bool = True,
+    return_log_pi: bool,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     std = jnp.exp(log_std)
     noise = jax.random.normal(key, std.shape)
     action = jnp.tanh(mean + noise * std)
     if return_log_pi:
-        return action, gaussian_and_tanh_log_prob(log_std, noise, action).sum(
+        return action, _gaussian_and_tanh_log_prob(log_std, noise, action).sum(
             axis=1, keepdims=True
         )
     return action
@@ -76,49 +64,38 @@ def reparameterize_gaussian_and_tanh(
 class ReplayBuffer:
     def __init__(
         self,
-        buffer_size,
-        state_space,
-        action_space,
-        gamma,
+        buffer_size: int,
+        state_space: Env,
+        action_space: Env,
+        gamma: float,
     ):
-        assert len(state_space.shape) in (1, 3)
-
         self._n = 0
         self._p = 0
         self.buffer_size = buffer_size
         self.state_shape = state_space.shape
-        self.use_image = len(self.state_shape) == 3
 
-        if self.use_image:
-            # Store images as a list of LazyFrames, which uses 4 times less memory.
-            self.state = [None] * buffer_size
-            self.next_state = [None] * buffer_size
-        else:
-            self.state = np.empty(
-                (buffer_size, *state_space.shape), dtype=np.float32
-            )
-            self.next_state = np.empty(
-                (buffer_size, *state_space.shape), dtype=np.float32
-            )
+        self.state = np.empty(
+            (buffer_size, *state_space.shape), dtype=np.float32
+        )
+        self.next_state = np.empty(
+            (buffer_size, *state_space.shape), dtype=np.float32
+        )
 
-        if type(action_space) == Box:
-            self.action = np.empty(
-                (buffer_size, *action_space.shape), dtype=np.float32
-            )
-        elif type(action_space) == Discrete:
-            self.action = np.empty((buffer_size, 1), dtype=np.int32)
-        else:
-            NotImplementedError
+        self.action = np.empty(
+            (buffer_size, *action_space.shape), dtype=np.float32
+        )
 
         self.reward = np.empty((buffer_size, 1), dtype=np.float32)
         self.done = np.empty((buffer_size, 1), dtype=np.float32)
 
-    def append(
-        self, state, action, reward, done, next_state, episode_done=None
-    ):
-        self._append(state, action, reward, done, next_state)
-
-    def _append(self, state, action, reward, done, next_state):
+    def push(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        reward: float,
+        done: bool,
+        next_state: np.ndarray,
+    ) -> None:
         self.state[self._p] = state
         self.action[self._p] = action
         self.reward[self._p] = float(reward)
@@ -128,154 +105,18 @@ class ReplayBuffer:
         self._p = (self._p + 1) % self.buffer_size
         self._n = min(self._n + 1, self.buffer_size)
 
-    def _sample_idx(self, batch_size):
-        return np.random.randint(low=0, high=self._n, size=batch_size)
-
-    def _sample(self, idxes):
-        if self.use_image:
-            state = np.empty((len(idxes), *self.state_shape), dtype=np.uint8)
-            next_state = state.copy()
-            for i, idx in enumerate(idxes):
-                state[i, ...] = self.state[idx]
-                next_state[i, ...] = self.next_state[idx]
-        else:
-            state = self.state[idxes]
-            next_state = self.next_state[idxes]
+    def sample(
+        self, batch_size: int
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        idxes = np.random.randint(low=0, high=self._n, size=batch_size)
 
         return (
-            state,
+            self.state[idxes],
             self.action[idxes],
             self.reward[idxes],
             self.done[idxes],
-            next_state,
+            self.next_state[idxes],
         )
-
-    def sample(self, batch_size):
-        idxes = self._sample_idx(batch_size)
-        batch = self._sample(idxes)
-        # Use fake weight to use the same interface with PER.
-        weight = np.ones((), dtype=np.float32)
-        return weight, batch
-
-
-class OffPolicyActorCritic:
-    def __init__(
-        self,
-        num_agent_steps,
-        state_space,
-        action_space,
-        seed,
-        gamma,
-        buffer_size,
-        batch_size,
-        tau=None,
-    ):
-        if not hasattr(self, "use_key_critic"):
-            self.use_key_critic = False
-        if not hasattr(self, "use_key_actor"):
-            self.use_key_actor = False
-
-        np.random.seed(seed)
-        self.rng = PRNGSequence(seed)
-
-        self.agent_step = 0
-        self.episode_step = 0
-        self.learning_step = 0
-        self.num_agent_steps = num_agent_steps
-        self.state_space = state_space
-        self.action_space = action_space
-        self.gamma = gamma
-        self.discrete_action = False if type(action_space) == Box else True
-
-        if not hasattr(self, "buffer"):
-            self.buffer = ReplayBuffer(
-                buffer_size=buffer_size,
-                state_space=state_space,
-                action_space=action_space,
-                gamma=gamma,
-            )
-
-        self.discount = gamma
-        self.batch_size = batch_size
-        self.cumulated_reward = 0.0
-        self.step_list = []
-
-        self._update_target = jax.jit(partial(soft_update, tau=tau))
-
-        # Define fake input for critic.
-        if not hasattr(self, "fake_args_critic"):
-            if self.discrete_action:
-                self.fake_args_critic = (fake_state(state_space),)
-            else:
-                self.fake_args_critic = (
-                    fake_state(state_space),
-                    fake_action(action_space),
-                )
-
-        # Define fake input for actor.
-        if not hasattr(self, "fake_args_actor"):
-            self.fake_args_actor = (fake_state(state_space),)
-
-    @property
-    def kwargs_critic(self):
-        return {"key": next(self.rng)} if self.use_key_critic else {}
-
-    @property
-    def kwargs_actor(self):
-        return {"key": next(self.rng)} if self.use_key_actor else {}
-
-    def select_action(self, state):
-        action = self._select_action(self.params_actor, state[None, ...])
-        return np.array(action[0])
-
-    def explore(self, state):
-        action = self._explore(
-            self.params_actor, state[None, ...], next(self.rng)
-        )
-        return np.array(action[0])
-
-    @abstractmethod
-    def _sample_action(self, params_actor, state, *args, **kwargs):
-        pass
-
-    @partial(jax.jit, static_argnums=0)
-    def _calculate_value_list(
-        self,
-        params_critic: hk.Params,
-        state: np.ndarray,
-        action: np.ndarray,
-    ) -> list[jnp.ndarray]:
-        return self.critic.apply(params_critic, state, action)
-
-    @partial(jax.jit, static_argnums=0)
-    def _calculate_value(
-        self,
-        params_critic: hk.Params,
-        state: np.ndarray,
-        action: np.ndarray,
-    ) -> jnp.ndarray:
-        return jnp.asarray(
-            self._calculate_value_list(params_critic, state, action)
-        ).min(axis=0)
-
-    @partial(jax.jit, static_argnums=0)
-    def _calculate_loss_critic_and_abs_td(
-        self,
-        value_list: list[jnp.ndarray],
-        target: jnp.ndarray,
-        weight: np.ndarray,
-    ) -> jnp.ndarray:
-        abs_td = jnp.abs(target - value_list[0])
-        loss_critic = (jnp.square(abs_td) * weight).mean()
-        for value in value_list[1:]:
-            loss_critic += (jnp.square(target - value) * weight).mean()
-        return loss_critic, jax.lax.stop_gradient(abs_td)
-
-    def is_update(self):
-        return True
-
-    def __str__(self):
-        return self.name
 
 
 class MLP(hk.Module):
@@ -283,12 +124,12 @@ class MLP(hk.Module):
         self,
         output_dim,
         hidden_units,
-        hidden_activation=nn.relu,
-        output_activation=None,
-        hidden_scale=1.0,
-        output_scale=1.0,
+        hidden_activation,
+        output_activation,
+        hidden_scale,
+        output_scale,
     ):
-        super(MLP, self).__init__()
+        super().__init__()
         self.output_dim = output_dim
         self.hidden_units = hidden_units
         self.hidden_activation = hidden_activation
@@ -301,7 +142,6 @@ class MLP(hk.Module):
         }
 
     def __call__(self, x):
-        x_input = x
         for i, unit in enumerate(self.hidden_units):
             x = hk.Linear(unit, **self.hidden_kwargs)(x)
             x = self.hidden_activation(x)
@@ -311,89 +151,88 @@ class MLP(hk.Module):
         return x
 
 
-class ContinuousQFunction(hk.Module):
+class QNetwork(hk.Module):
     def __init__(
         self,
         num_critics,
         hidden_units,
     ):
-        super(ContinuousQFunction, self).__init__()
+        super().__init__()
         self.num_critics = num_critics
         self.hidden_units = hidden_units
 
     def __call__(self, s, a):
         def _fn(x):
             return MLP(
-                1,
-                self.hidden_units,
+                output_dim=1,
+                hidden_units=self.hidden_units,
                 hidden_activation=nn.relu,
+                output_activation=None,
                 hidden_scale=np.sqrt(2),
+                output_scale=1.0,
             )(x)
 
         x = jnp.concatenate([s, a], axis=1)
-        # Return list even if num_critics == 1 for simple implementation.
         return [_fn(x) for _ in range(self.num_critics)]
 
 
-class ContinuousVFunction(hk.Module):
+class VNetwork(hk.Module):
     def __init__(
         self,
-        num_critics=1,
-        hidden_units=(64, 64),
+        num_critics,
+        hidden_units,
     ):
-        super(ContinuousVFunction, self).__init__()
+        super().__init__()
         self.num_critics = num_critics
         self.hidden_units = hidden_units
 
     def __call__(self, x):
         def _fn(x):
             return MLP(
-                1,
-                self.hidden_units,
-                # hidden_activation=jnp.tanh,
+                output_dim=1,
+                hidden_units=self.hidden_units,
                 hidden_activation=nn.relu,
+                output_activation=None,
                 hidden_scale=np.sqrt(2),
+                output_scale=1.0,
             )(x)
 
-        if self.num_critics == 1:
-            return _fn(x)
         return [_fn(x) for _ in range(self.num_critics)]
 
 
-class StateDependentGaussianPolicyExtra(hk.Module):
+class PolicyNetwork(hk.Module):
     def __init__(
         self,
         action_space,
-        hidden_units=(256, 256),
-        log_std_min=-10.0,
-        log_std_max=2.0,
-        clip_log_std=True,
+        hidden_units,
+        log_std_min,
+        log_std_max,
     ):
-        super(StateDependentGaussianPolicyExtra, self).__init__()
+        super().__init__()
         self.action_space = action_space
         self.hidden_units = hidden_units
         self.log_std_min = log_std_min
         self.log_std_max = log_std_max
-        self.clip_log_std = clip_log_std
 
     def __call__(self, x):
         x = MLP(
-            2 * self.action_space.shape[0],
-            self.hidden_units,
+            output_dim=2 * self.action_space.shape[0],
+            hidden_units=self.hidden_units,
             hidden_activation=nn.relu,
+            output_activation=None,
             hidden_scale=np.sqrt(2),
+            output_scale=1.0,
         )(x)
         mean, log_std = jnp.split(x, 2, axis=1)
         log_std = jnp.clip(log_std, self.log_std_min, self.log_std_max)
         return mean, log_std
 
 
-class AFU(OffPolicyActorCritic):
+class AFU:
     name = "AFU"
 
     def __init__(
         self,
-        num_agent_steps,
         state_space,
         action_space,
         seed,
@@ -410,48 +249,58 @@ class AFU(OffPolicyActorCritic):
         *args,
         **kwargs,
     ):
-        if not hasattr(self, "use_key_critic"):
-            self.use_key_critic = False
-            # self.use_key_critic = True
-        if not hasattr(self, "use_key_actor"):
-            self.use_key_actor = True
-
-        self.info_dict = {}
+        self.use_key_critic = False
+        self.use_key_actor = True
 
         self.tau = tau
-        self.target_update_period = 1 if tau < 1 else int(tau)
 
-        super(AFU, self).__init__(
-            num_agent_steps=num_agent_steps,
+        np.random.seed(seed)
+        self.rng = PRNGSequence(seed)
+
+        self.state_space = state_space
+        self.action_space = action_space
+        self.gamma = gamma
+
+        self.buffer = ReplayBuffer(
+            buffer_size=buffer_size,
             state_space=state_space,
             action_space=action_space,
-            seed=seed,
             gamma=gamma,
-            buffer_size=buffer_size,
-            batch_size=batch_size,
-            tau=tau if tau < 1 else 1,
-            *args,
-            **kwargs,
         )
 
-        self.fake_args_value = (fake_state(state_space),)
+        self.discount = gamma
+        self.batch_size = batch_size
+
+        self._update_target = jax.jit(partial(_soft_update, tau=tau))
+
+        # Define fake input for critic.
+        self.fake_args_critic = (
+            self._fake_state(state_space),
+            self._fake_action(action_space),
+        )
+
+        # Define fake input for actor.
+        if not hasattr(self, "fake_args_actor"):
+            self.fake_args_actor = (self._fake_state(state_space),)
+
+        self.fake_args_value = (self._fake_state(state_space),)
 
         self.gradient_reduction = gradient_reduction
 
         def fn_critic(s, a):
-            return ContinuousQFunction(
+            return QNetwork(
                 num_critics=3,
                 hidden_units=units_critic,
             )(s, a)
 
         def fn_value(s):
-            return ContinuousVFunction(
+            return VNetwork(
                 num_critics=2,
                 hidden_units=units_critic,
             )(s)
 
         def fn_actor(s):
-            return StateDependentGaussianPolicyExtra(
+            return PolicyNetwork(
                 action_space=action_space,
                 hidden_units=units_actor,
                 log_std_min=-10.0,
@@ -495,29 +344,20 @@ class AFU(OffPolicyActorCritic):
         mean, _ = self.actor.apply(params_actor, state)
         return jnp.tanh(mean)
 
-    @partial(jax.jit, static_argnums=0)
-    def _explore(
-        self,
-        params_actor: hk.Params,
-        state: np.ndarray,
-        key: jnp.ndarray,
-    ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mean, log_std = self.actor.apply(params_actor, state)
-        return reparameterize_gaussian_and_tanh(mean, log_std, key, False)
-
-    def select_action(self, state):
+    def select_action(self, state: np.ndarray) -> np.ndarray:
         action = self._select_action(self.params_actor, state[None, ...])
         return np.array(action[0])
 
-    def explore(self, state):
-        action = self._explore(
-            self.params_actor, state[None, ...], next(self.rng)
+    def explore(self, state: np.ndarray) -> np.ndarray:
+        key = next(self.rng)
+        mean, log_std = self.actor.apply(self.params_actor, state[None, ...])
+        action = _reparameterize_gaussian_and_tanh(
+            mean=mean, log_std=log_std, key=key, return_log_pi=False
         )
         return np.array(action[0])
 
-    def update(self):
-        self.learning_step += 1
-        weight, batch = self.buffer.sample(self.batch_size)
+    def update(self) -> None:
+        batch = self.buffer.sample(self.batch_size)
         state, action, reward, done, next_state = batch
 
         # Update critic and value networks together
@@ -532,7 +372,6 @@ class AFU(OffPolicyActorCritic):
             reward=reward,
             done=done,
             next_state=next_state,
-            weight=weight,
             gradient_reduction=self.gradient_reduction,
             **self.kwargs_critic,
         )
@@ -585,24 +424,6 @@ class AFU(OffPolicyActorCritic):
         )
 
     @partial(jax.jit, static_argnums=0)
-    def _sample_action(
-        self,
-        params_actor: hk.Params,
-        state: np.ndarray,
-        key: jnp.ndarray,
-    ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mean, log_std = self.actor.apply(params_actor, state)
-        return reparameterize_gaussian_and_tanh(mean, log_std, key, True)
-
-    @partial(jax.jit, static_argnums=0)
-    def _calculate_log_pi(
-        self,
-        action: np.ndarray,
-        log_pi: np.ndarray,
-    ) -> jnp.ndarray:
-        return log_pi
-
-    @partial(jax.jit, static_argnums=0)
     def _loss_critic(
         self,
         params_critic: hk.Params,
@@ -613,10 +434,7 @@ class AFU(OffPolicyActorCritic):
         reward: np.ndarray,
         done: np.ndarray,
         next_state: np.ndarray,
-        weight: float | np.ndarray | list[jnp.ndarray],
         gradient_reduction: float,
-        *args,
-        **kwargs,
     ) -> tuple[jnp.ndarray, dict]:
         next_v_values = self.value.apply(params_value_target, next_state)
         v_targets = jnp.min(jnp.asarray(next_v_values), axis=0)
@@ -666,17 +484,18 @@ class AFU(OffPolicyActorCritic):
         log_alpha: jnp.ndarray,
         state: np.ndarray,
         action: np.ndarray,
-        *args,
-        **kwargs,
+        key: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         mean, log_std = self.actor.apply(params_actor, state)
-        sampled_action, log_pi = reparameterize_gaussian_and_tanh(
-            mean, log_std, kwargs["key"], True
+
+        sampled_action, log_pi = _reparameterize_gaussian_and_tanh(
+            mean=mean, log_std=log_std, key=key, return_log_pi=True
         )
         q_list = self._calculate_value_list(
             params_critic, state, sampled_action
         )
-        mean_log_pi = self._calculate_log_pi(sampled_action, log_pi).mean()
+
+        mean_log_pi = log_pi.mean()
 
         mean_q = q_list[-1].mean()
         loss = jax.lax.stop_gradient(jnp.exp(log_alpha)) * mean_log_pi - mean_q
@@ -691,27 +510,36 @@ class AFU(OffPolicyActorCritic):
     ) -> tuple[jnp.ndarray, Any]:
         return -log_alpha * (self.target_entropy + mean_log_pi), None
 
-    def _calculate_target(
-        self,
-        params_critic_target,
-        reward,
-        done,
-        next_state,
-        next_action,
-        *args,
-        **kwargs,
-    ):
-        pass
+    @property
+    def kwargs_critic(self):
+        return {"key": next(self.rng)} if self.use_key_critic else {}
 
-    def calculate_value(
+    @property
+    def kwargs_actor(self):
+        return {"key": next(self.rng)} if self.use_key_actor else {}
+
+    @partial(jax.jit, static_argnums=0)
+    def _calculate_value_list(
+        self,
+        params_critic: hk.Params,
+        state: np.ndarray,
+        action: np.ndarray,
+    ) -> list[jnp.ndarray]:
+        return self.critic.apply(params_critic, state, action)
+
+    @partial(jax.jit, static_argnums=0)
+    def _calculate_value(
         self,
         params_critic: hk.Params,
         state: np.ndarray,
         action: np.ndarray,
     ) -> jnp.ndarray:
-        critic = self._calculate_value_list(params_critic, state, action)
-        return jnp.min(jnp.asarray(critic[:-1]), axis=0)
+        return jnp.asarray(
+            self._calculate_value_list(params_critic, state, action)
+        ).min(axis=0)
 
-    def show_stuff(self):
-        for key in self.info_dict:
-            print(key, self.info_dict[key])
+    def _fake_state(self, state_space: Env) -> np.ndarray:
+        return state_space.sample()[None, ...].astype(np.float32)
+
+    def _fake_action(self, action_space: Env) -> np.ndarray:
+        return action_space.sample().astype(np.float32)[None, ...]

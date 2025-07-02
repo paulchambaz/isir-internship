@@ -42,7 +42,6 @@ class AFUP(RLAlgo):
             gradient_reduction=rho,
             gamma=gamma,
             seed=42,
-            num_agent_steps=100_000,
         )
 
     def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
@@ -60,7 +59,7 @@ class AFUP(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.algo.buffer.append(
+        self.algo.buffer.push(
             state=state,
             action=action,
             reward=reward,
