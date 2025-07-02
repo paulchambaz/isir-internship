@@ -524,8 +524,8 @@ class AFU(OffPolicyActorCritic):
         (loss_critic, critic_aux), grad = jax.value_and_grad(
             self._loss_critic, argnums=(0, 1), has_aux=True
         )(
-            params_critic=self.params_critic,
-            params_value=self.params_value,
+            self.params_critic,
+            self.params_value,
             params_value_target=self.params_value_target,
             state=state,
             action=action,
