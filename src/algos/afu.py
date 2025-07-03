@@ -127,7 +127,7 @@ class AFU(RLAlgo):
             else None
         )
 
-        self.replay_buffer = ReplayBuffer(replay_size)
+        self.replay_buffer = ReplayBuffer(replay_size, state_dim, action_dim)
         self.batch_size = batch_size
 
         self.target_entropy = -action_dim
@@ -245,42 +245,157 @@ class AFU(RLAlgo):
         next_states: torch.Tensor,
         dones: torch.Tensor,
     ) -> torch.Tensor:
+        print("=== CRITIC LOSS COMPUTATION - TENSOR SHAPES ===")
+        print(f"Input states shape: {states.shape}")
+        print(f"Input actions shape: {actions.shape}")
+        print(f"Input rewards shape: {rewards.shape}")
+        print(f"Input next_states shape: {next_states.shape}")
+        print(f"Input dones shape: {dones.shape}")
+
+        print("\n--- TARGET COMPUTATION ---")
         with torch.no_grad():
             next_v_values = self.v_target_network(next_states)
-            v_targets = torch.min(torch.stack(next_v_values), dim=0)[0]
+            print(f"next_v_values (list length): {len(next_v_values)}")
+            for i, v_val in enumerate(next_v_values):
+                print(f"  next_v_values[{i}] shape: {v_val.shape}")
+
+            v_targets_stacked = torch.stack(next_v_values)
+            print(f"v_targets_stacked shape: {v_targets_stacked.shape}")
+
+            v_targets = torch.min(v_targets_stacked, dim=0)[0]
+            print(f"v_targets shape after min: {v_targets.shape}")
 
             q_targets = rewards + self.gamma * (1.0 - dones.float()) * v_targets
+            print(f"q_targets shape: {q_targets.shape}")
+            print(f"rewards shape: {rewards.shape}")
+            print(f"dones shape: {dones.shape}")
+            print(f"v_targets shape: {v_targets.shape}")
 
-        v_values = torch.stack(self.v_network(states))
+        print("\n--- CURRENT VALUE ESTIMATES ---")
+        v_values_list = self.v_network(states)
+        print(f"v_values_list (list length): {len(v_values_list)}")
+        for i, v_val in enumerate(v_values_list):
+            print(f"  v_values_list[{i}] shape: {v_val.shape}")
 
-        q_values = self.q_network(states, actions)
-        q_final = q_values[-1]
+        v_values = torch.stack(v_values_list)
+        print(f"v_values stacked shape: {v_values.shape}")
 
-        q_loss = torch.mean((q_targets - q_final) ** 2)
+        q_values_list = self.q_network(states, actions)
+        print(f"q_values_list (list length): {len(q_values_list)}")
+        for i, q_val in enumerate(q_values_list):
+            print(f"  q_values_list[{i}] shape: {q_val.shape}")
 
-        optim_advantages = -torch.stack(q_values[:-1])
+        q_final = torch.stack(q_values_list[-1:])
+        print(f"q_final shape: {q_final.shape}")
 
-        mix_case = (
-            (v_values + optim_advantages < q_targets.unsqueeze(0))
-            .detach()
-            .float()
+        print("\n--- Q-LOSS COMPUTATION ---")
+        abs_td = torch.abs(q_targets - q_final)
+        print(f"abs_td shape: {abs_td.shape}")
+        print(
+            f"Broadcasting: q_targets {q_targets.shape} - q_final {q_final.shape}"
         )
-        upsilon_values = (
-            1 - self.rho * mix_case
-        ) * v_values + self.rho * mix_case * v_values.detach()
 
-        target_diff = upsilon_values - q_targets.unsqueeze(0)
+        q_loss = torch.mean(abs_td**2)
+        print(f"q_loss (scalar): {q_loss.shape}")
 
-        up_case = (v_values >= q_targets.unsqueeze(0)).detach().float()
-        z_values = (
-            optim_advantages**2
-            + up_case * 2 * optim_advantages * target_diff
-            + target_diff**2
+        print("\n--- ADVANTAGE COMPUTATION ---")
+        optim_advantages = -torch.stack(q_values_list[:-1])
+        print(f"optim_advantages shape: {optim_advantages.shape}")
+        print(f"Number of advantage critics: {len(q_values_list[:-1])}")
+
+        print("\n--- CONDITIONAL OPTIMIZATION LOGIC ---")
+        condition_tensor = v_values + optim_advantages
+        print(f"v_values shape: {v_values.shape}")
+        print(f"optim_advantages shape: {optim_advantages.shape}")
+        print(
+            f"condition_tensor (v_values + optim_advantages) shape: {condition_tensor.shape}"
         )
+        print(f"q_targets shape for comparison: {q_targets.shape}")
+
+        mix_case = (condition_tensor < q_targets).detach().float()
+        print(f"mix_case shape: {mix_case.shape}")
+        print(
+            f"Broadcasting check: condition_tensor {condition_tensor.shape} < q_targets {q_targets.shape}"
+        )
+
+        print("\n--- UPSILON COMPUTATION ---")
+        term1 = (1 - self.rho * mix_case) * v_values
+        term2 = self.rho * mix_case * v_values.detach()
+        print(f"term1 shape: {term1.shape}")
+        print(f"term2 shape: {term2.shape}")
+
+        upsilon_values = term1 + term2
+        print(f"upsilon_values shape: {upsilon_values.shape}")
+
+        print("\n--- FINAL LOSS COMPUTATION ---")
+        target_diff = upsilon_values - q_targets
+        print(f"target_diff shape: {target_diff.shape}")
+        print(
+            f"Broadcasting: upsilon_values {upsilon_values.shape} - q_targets {q_targets.shape}"
+        )
+
+        up_case = (v_values >= q_targets).detach().float()
+        print(f"up_case shape: {up_case.shape}")
+
+        z_term1 = optim_advantages**2
+        z_term2 = up_case * 2 * optim_advantages * target_diff
+        z_term3 = target_diff**2
+
+        print(f"z_term1 (advantages^2) shape: {z_term1.shape}")
+        print(f"z_term2 (interaction term) shape: {z_term2.shape}")
+        print(f"z_term3 (target_diff^2) shape: {z_term3.shape}")
+
+        z_values = z_term1 + z_term2 + z_term3
+        print(f"z_values shape: {z_values.shape}")
 
         va_loss = torch.mean(z_values)
+        print(f"va_loss (scalar): {va_loss.shape}")
 
-        return va_loss + q_loss
+        total_loss = va_loss + q_loss
+        print(f"total_loss (scalar): {total_loss.shape}")
+        print("=== END CRITIC LOSS COMPUTATION ===\n")
+
+        return total_loss
+
+    # def _compute_critic_loss(
+    #     self,
+    #     states: torch.Tensor,
+    #     actions: torch.Tensor,
+    #     rewards: torch.Tensor,
+    #     next_states: torch.Tensor,
+    #     dones: torch.Tensor,
+    # ) -> torch.Tensor:
+    #     with torch.no_grad():
+    #         next_v_values = torch.stack(self.v_target_network(next_states))
+    #         v_targets = torch.min(next_v_values, dim=0)[0]
+    #         q_targets = rewards + self.gamma * (1.0 - dones.float()) * v_targets
+    #
+    #     v_values = torch.stack(self.v_network(states))
+    #
+    #     q_values = torch.stack(self.q_network(states, actions))
+    #     q_final = q_values[-1:]
+    #
+    #     abs_td = torch.abs(q_targets - q_final)
+    #     q_loss = torch.mean(abs_td**2)
+    #
+    #     optim_advantages = -q_values[:-1]
+    #
+    #     mix_case = (v_values + optim_advantages < q_targets).detach().float()
+    #     upsilon_values = (
+    #         1 - self.rho * mix_case
+    #     ) * v_values + self.rho * mix_case * v_values.detach()
+    #
+    #     target_diff = upsilon_values - q_targets
+    #     up_case = (v_values >= q_targets).detach().float()
+    #     z_values = (
+    #         optim_advantages**2
+    #         + up_case * 2 * optim_advantages * target_diff
+    #         + target_diff**2
+    #     )
+    #
+    #     va_loss = torch.mean(z_values)
+    #
+    #     return va_loss + q_loss
 
     def _compute_policy_loss(
         self, states: torch.Tensor
@@ -341,16 +456,16 @@ class AFU(RLAlgo):
                     nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
                     layers.extend([linear_layer, nn.ReLU()])
 
-                layers.append(nn.Linear(hidden_dims[-1], 1))
+                final_layer = nn.Linear(hidden_dims[-1], 1)
+                nn.init.orthogonal_(final_layer.weight)
+                layers.append(final_layer)
                 self.networks.append(nn.Sequential(*layers))
 
         def forward(
             self, state: torch.Tensor, action: torch.Tensor
         ) -> list[torch.Tensor]:
             state_action = torch.cat([state, action], dim=1)
-            return [
-                network(state_action).squeeze(-1) for network in self.networks
-            ]
+            return [network(state_action) for network in self.networks]
 
     class VNetwork(nn.Module):
         __slots__ = ["networks"]
@@ -370,11 +485,13 @@ class AFU(RLAlgo):
                     nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
                     layers.extend([linear_layer, nn.ReLU()])
 
-                layers.append(nn.Linear(hidden_dims[-1], 1))
+                final_layer = nn.Linear(hidden_dims[-1], 1)
+                nn.init.orthogonal_(final_layer.weight)
+                layers.append(final_layer)
                 self.networks.append(nn.Sequential(*layers))
 
         def forward(self, state: torch.Tensor) -> list[torch.Tensor]:
-            return [network(state).squeeze(-1) for network in self.networks]
+            return [network(state) for network in self.networks]
 
     class PolicyNetwork(nn.Module):
         __slots__ = ["log_std_max", "log_std_min", "network"]
@@ -401,7 +518,9 @@ class AFU(RLAlgo):
                 nn.init.orthogonal_(linear_layer.weight, gain=math.sqrt(2))
                 layers.extend([linear_layer, nn.ReLU()])
 
-            layers.append(nn.Linear(hidden_dims[-1], 2 * action_dim))
+            final_layer = nn.Linear(hidden_dims[-1], 2 * action_dim)
+            nn.init.orthogonal_(final_layer.weight)
+            layers.append(final_layer)
             self.network = nn.Sequential(*layers)
 
         def forward(

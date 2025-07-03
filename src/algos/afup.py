@@ -1,4 +1,3 @@
-import gymnasium as gym
 import numpy as np
 
 # from afu_rljax.algorithm import AFU
@@ -25,12 +24,10 @@ class AFUP(RLAlgo):
         rho: float,
         gamma: float,
         alpha: float,
-        action_space: gym.Env,
-        state_space: gym.Env,
     ) -> None:
         self.algo = AFU(
-            action_space=action_space,
-            state_space=state_space,
+            state_dim=state_dim,
+            action_dim=action_dim,
             units_actor=hidden_dims,
             units_critic=hidden_dims,
             buffer_size=replay_size,
@@ -39,17 +36,13 @@ class AFUP(RLAlgo):
             lr_critic=critic_lr,
             lr_alpha=temperature_lr,
             tau=tau,
-            gradient_reduction=rho,
+            rho=rho,
             gamma=gamma,
             seed=42,
         )
 
     def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
-        return (
-            self.algo.select_action(state)
-            if evaluation
-            else self.algo.explore(state)
-        )
+        return self.algo.select_action(state, evaluation)
 
     def push_buffer(
         self,
@@ -59,13 +52,7 @@ class AFUP(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.algo.buffer.push(
-            state=state,
-            action=action,
-            reward=reward,
-            done=done,
-            next_state=next_state,
-        )
+        self.algo.buffer.push(state, action, reward, next_state, done)
 
     def update(self) -> None:
         self.algo.update()
