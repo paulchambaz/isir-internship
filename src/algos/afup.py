@@ -1,7 +1,7 @@
 import numpy as np
 
 # from afu_rljax.algorithm import AFU
-from .afu3 import AFU
+from .afu2 import AFU
 from .rl_algo import RLAlgo
 
 
@@ -24,6 +24,7 @@ class AFUP(RLAlgo):
         rho: float,
         gamma: float,
         alpha: float,
+        seed: int,
     ) -> None:
         self.algo = AFU(
             state_dim=state_dim,
@@ -38,7 +39,7 @@ class AFUP(RLAlgo):
             tau=tau,
             rho=rho,
             gamma=gamma,
-            seed=42,
+            seed=seed,
         )
 
     def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
