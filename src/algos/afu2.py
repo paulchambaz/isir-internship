@@ -240,7 +240,6 @@ class AFU:
             v_params=self.v_params,
             log_alpha=self.log_alpha,
             state=state,
-            action=action,
             key=next(self.rng),
         )
 
@@ -264,6 +263,7 @@ class AFU:
             self.v_target_params, self.v_params
         )
 
+    @partial(jax.jit, static_argnums=0)
     def _compute_critic_loss(
         self,
         q_params: hk.Params,
@@ -276,167 +276,38 @@ class AFU:
         done: np.ndarray,
         rho: float,
     ) -> jnp.ndarray:
-        print("=== JAX CRITIC LOSS COMPUTATION - TENSOR SHAPES ===")
-        print(f"JAX Input state shape: {state.shape}")
-        print(f"JAX Input action shape: {action.shape}")
-        print(f"JAX Input reward shape: {reward.shape}")
-        print(f"JAX Input next_state shape: {next_state.shape}")
-        print(f"JAX Input done shape: {done.shape}")
-
-        print("\n--- JAX TARGET COMPUTATION ---")
         next_v_values = self.v_network.apply(v_target_params, next_state)
-        print(f"JAX next_v_values (list length): {len(next_v_values)}")
-        for i, v_val in enumerate(next_v_values):
-            print(f"  JAX next_v_values[{i}] shape: {v_val.shape}")
-
-        v_targets_asarray = jnp.asarray(next_v_values)
-        print(f"JAX v_targets_asarray shape: {v_targets_asarray.shape}")
-
-        v_targets = jnp.min(v_targets_asarray, axis=0)
-        print(f"JAX v_targets shape after min: {v_targets.shape}")
+        v_targets = jnp.min(jnp.asarray(next_v_values), axis=0)
 
         q_targets = jax.lax.stop_gradient(
             reward + self.gamma * (1.0 - done) * v_targets
         )
-        print(f"JAX q_targets shape: {q_targets.shape}")
-        print(f"JAX reward shape: {reward.shape}")
-        print(f"JAX done shape: {done.shape}")
-        print(f"JAX v_targets shape: {v_targets.shape}")
 
-        print("\n--- JAX CURRENT VALUE ESTIMATES ---")
-        v_values_list = self.v_network.apply(v_params, state)
-        print(f"JAX v_values_list (list length): {len(v_values_list)}")
-        for i, v_val in enumerate(v_values_list):
-            print(f"  JAX v_values_list[{i}] shape: {v_val.shape}")
-
-        v_values = jnp.asarray(v_values_list)
-        print(f"JAX v_values asarray shape: {v_values.shape}")
+        v_values = jnp.asarray(self.v_network.apply(v_params, state))
 
         q_values_list = self.q_network.apply(q_params, state, action)
-        print(f"JAX q_values_list (list length): {len(q_values_list)}")
-        for i, q_val in enumerate(q_values_list):
-            print(f"  JAX q_values_list[{i}] shape: {q_val.shape}")
+        q_values = jnp.asarray(q_values_list[-1:])
 
-        q_final = jnp.asarray(q_values_list[-1:])
-        print(f"JAX q_final shape: {q_final.shape}")
-
-        print("\n--- JAX Q-LOSS COMPUTATION ---")
-        abs_td = jnp.abs(q_targets - q_final)
-        print(f"JAX abs_td shape: {abs_td.shape}")
-        print(
-            f"JAX Broadcasting: q_targets {q_targets.shape} - q_final {q_final.shape}"
-        )
-
+        abs_td = jnp.abs(q_targets - q_values)
         q_loss = (abs_td**2).mean()
-        print(f"JAX q_loss (scalar): {q_loss.shape}")
 
-        print("\n--- JAX ADVANTAGE COMPUTATION ---")
-        optim_advantages = -jnp.asarray(q_values_list[:-1])
-        print(f"JAX optim_advantages shape: {optim_advantages.shape}")
-        print(f"JAX Number of advantage critics: {len(q_values_list[:-1])}")
+        a_values = -jnp.asarray(q_values_list[:-1])
 
-        print("\n--- JAX CONDITIONAL OPTIMIZATION LOGIC ---")
-        condition_tensor = v_values + optim_advantages
-        print(f"JAX v_values shape: {v_values.shape}")
-        print(f"JAX optim_advantages shape: {optim_advantages.shape}")
-        print(
-            f"JAX condition_tensor (v_values + optim_advantages) shape: {condition_tensor.shape}"
-        )
-        print(f"JAX q_targets shape for comparison: {q_targets.shape}")
-
-        mix_case = jax.lax.stop_gradient(condition_tensor < q_targets)
-        print(f"JAX mix_case shape: {mix_case.shape}")
-        print(
-            f"JAX Broadcasting check: condition_tensor {condition_tensor.shape} < q_targets {q_targets.shape}"
-        )
-
-        print("\n--- JAX UPSILON COMPUTATION ---")
-        term1 = (1 - rho * mix_case) * v_values
-        term2 = rho * mix_case * jax.lax.stop_gradient(v_values)
-        print(f"JAX term1 shape: {term1.shape}")
-        print(f"JAX term2 shape: {term2.shape}")
-
-        upsilon_values = term1 + term2
-        print(f"JAX upsilon_values shape: {upsilon_values.shape}")
-
-        print("\n--- JAX FINAL LOSS COMPUTATION ---")
-        target_diff = upsilon_values - q_targets
-        print(f"JAX target_diff shape: {target_diff.shape}")
-        print(
-            f"JAX Broadcasting: upsilon_values {upsilon_values.shape} - q_targets {q_targets.shape}"
-        )
+        mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
+        upsilon_values = (
+            1 - rho * mix_case
+        ) * v_values + rho * mix_case * jax.lax.stop_gradient(v_values)
 
         up_case = jax.lax.stop_gradient(v_values >= q_targets)
-        print(f"JAX up_case shape: {up_case.shape}")
-
-        z_term1 = optim_advantages**2
-        z_term2 = up_case * 2 * optim_advantages * target_diff
-        z_term3 = target_diff**2
-
-        print(f"JAX z_term1 (advantages^2) shape: {z_term1.shape}")
-        print(f"JAX z_term2 (interaction term) shape: {z_term2.shape}")
-        print(f"JAX z_term3 (target_diff^2) shape: {z_term3.shape}")
-
-        z_values = z_term1 + z_term2 + z_term3
-        print(f"JAX z_values shape: {z_values.shape}")
+        z_values = (
+            a_values**2
+            + up_case * 2 * a_values * (upsilon_values - q_targets)
+            + (upsilon_values - q_targets) ** 2
+        )
 
         va_loss = z_values.mean()
-        print(f"JAX va_loss (scalar): {va_loss.shape}")
 
-        total_loss = va_loss + q_loss
-        print(f"JAX total_loss (scalar): {total_loss.shape}")
-        print("=== END JAX CRITIC LOSS COMPUTATION ===\n")
-
-        return total_loss
-
-    # @partial(jax.jit, static_argnums=0)
-    # def _compute_critic_loss(
-    #     self,
-    #     q_params: hk.Params,
-    #     v_params: hk.Params,
-    #     v_target_params: hk.Params,
-    #     state: np.ndarray,
-    #     action: np.ndarray,
-    #     reward: np.ndarray,
-    #     next_state: np.ndarray,
-    #     done: np.ndarray,
-    #     rho: float,
-    # ) -> jnp.ndarray:
-    #
-    #     next_v_values = self.v_network.apply(v_target_params, next_state)
-    #     v_targets = jnp.min(jnp.asarray(next_v_values), axis=0)
-    #
-    #     q_targets = jax.lax.stop_gradient(
-    #         reward + self.gamma * (1.0 - done) * v_targets
-    #     )
-    #
-    #     v_values = jnp.asarray(self.v_network.apply(v_params, state))
-    #
-    #     q_values = self.q_network.apply(q_params, state, action)
-    #     q_final = jnp.asarray(q_values[-1:])
-    #
-    #     abs_td = jnp.abs(q_targets - q_final)
-    #     q_loss = (abs_td**2).mean()
-    #
-    #     optim_advantages = -jnp.asarray(q_values[:-1])
-    #
-    #     mix_case = jax.lax.stop_gradient(
-    #         v_values + optim_advantages < q_targets
-    #     )
-    #     upsilon_values = (
-    #         1 - rho * mix_case
-    #     ) * v_values + rho * mix_case * jax.lax.stop_gradient(v_values)
-    #
-    #     up_case = jax.lax.stop_gradient(v_values >= q_targets)
-    #     z_values = (
-    #         optim_advantages**2
-    #         + up_case * 2 * optim_advantages * (upsilon_values - q_targets)
-    #         + (upsilon_values - q_targets) ** 2
-    #     )
-    #
-    #     va_loss = z_values.mean()
-    #
-    #     return va_loss + q_loss
+        return va_loss + q_loss
 
     @partial(jax.jit, static_argnums=0)
     def _compute_policy_loss(
@@ -446,15 +317,14 @@ class AFU:
         v_params: hk.Params,
         log_alpha: jnp.ndarray,
         state: np.ndarray,
-        action: np.ndarray,
         key: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         mean, log_std = self.policy_network.apply(policy_params, state)
 
-        sampled_action, log_pi = self._reparameterize_gaussian_and_tanh(
+        action, log_pi = self._reparameterize_gaussian_and_tanh(
             mean=mean, log_std=log_std, key=key
         )
-        q_list = self.q_network.apply(q_params, state, sampled_action)
+        q_list = self.q_network.apply(q_params, state, action)
 
         mean_log_pi = log_pi.mean()
 

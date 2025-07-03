@@ -173,24 +173,23 @@ class AFU(RLAlgo):
             self.replay_buffer.sample(self.batch_size)
         )
 
+        self.q_optimizer.zero_grad()
+        self.v_optimizer.zero_grad()
         critic_loss = self._compute_critic_loss(
             states, actions, rewards, next_states, dones
         )
-
-        self.v_optimizer.zero_grad()
-        self.q_optimizer.zero_grad()
         critic_loss.backward()
-        self.v_optimizer.step()
         self.q_optimizer.step()
-
-        policy_loss, temperature_loss = self._compute_policy_loss(states)
+        self.v_optimizer.step()
 
         self.policy_optimizer.zero_grad()
+        policy_loss, mean_log_probs = self._compute_policy_loss(states)
         policy_loss.backward()
         self.policy_optimizer.step()
 
         if self.learn_temperature:
             self.temperature_optimizer.zero_grad()
+            temperature_loss = self._compute_temperature_loss(mean_log_probs)
             temperature_loss.backward()
             self.temperature_optimizer.step()
 
@@ -245,192 +244,133 @@ class AFU(RLAlgo):
         next_states: torch.Tensor,
         dones: torch.Tensor,
     ) -> torch.Tensor:
-        print("=== CRITIC LOSS COMPUTATION - TENSOR SHAPES ===")
-        print(f"Input states shape: {states.shape}")
-        print(f"Input actions shape: {actions.shape}")
-        print(f"Input rewards shape: {rewards.shape}")
-        print(f"Input next_states shape: {next_states.shape}")
-        print(f"Input dones shape: {dones.shape}")
-
-        print("\n--- TARGET COMPUTATION ---")
         with torch.no_grad():
-            next_v_values = self.v_target_network(next_states)
-            print(f"next_v_values (list length): {len(next_v_values)}")
-            for i, v_val in enumerate(next_v_values):
-                print(f"  next_v_values[{i}] shape: {v_val.shape}")
-
-            v_targets_stacked = torch.stack(next_v_values)
-            print(f"v_targets_stacked shape: {v_targets_stacked.shape}")
-
-            v_targets = torch.min(v_targets_stacked, dim=0)[0]
-            print(f"v_targets shape after min: {v_targets.shape}")
+            v_targets_list = torch.stack(self.v_target_network(next_states))
+            v_targets = torch.min(v_targets_list, dim=0)[0]
 
             q_targets = rewards + self.gamma * (1.0 - dones.float()) * v_targets
-            print(f"q_targets shape: {q_targets.shape}")
-            print(f"rewards shape: {rewards.shape}")
-            print(f"dones shape: {dones.shape}")
-            print(f"v_targets shape: {v_targets.shape}")
 
-        print("\n--- CURRENT VALUE ESTIMATES ---")
-        v_values_list = self.v_network(states)
-        print(f"v_values_list (list length): {len(v_values_list)}")
-        for i, v_val in enumerate(v_values_list):
-            print(f"  v_values_list[{i}] shape: {v_val.shape}")
-
-        v_values = torch.stack(v_values_list)
-        print(f"v_values stacked shape: {v_values.shape}")
+        v_values = torch.stack(self.v_network(states))
 
         q_values_list = self.q_network(states, actions)
-        print(f"q_values_list (list length): {len(q_values_list)}")
-        for i, q_val in enumerate(q_values_list):
-            print(f"  q_values_list[{i}] shape: {q_val.shape}")
+        q_values = torch.stack(q_values_list[-1:])
 
-        q_final = torch.stack(q_values_list[-1:])
-        print(f"q_final shape: {q_final.shape}")
-
-        print("\n--- Q-LOSS COMPUTATION ---")
-        abs_td = torch.abs(q_targets - q_final)
-        print(f"abs_td shape: {abs_td.shape}")
-        print(
-            f"Broadcasting: q_targets {q_targets.shape} - q_final {q_final.shape}"
-        )
-
+        abs_td = torch.abs(q_targets - q_values)
         q_loss = torch.mean(abs_td**2)
-        print(f"q_loss (scalar): {q_loss.shape}")
 
-        print("\n--- ADVANTAGE COMPUTATION ---")
-        optim_advantages = -torch.stack(q_values_list[:-1])
-        print(f"optim_advantages shape: {optim_advantages.shape}")
-        print(f"Number of advantage critics: {len(q_values_list[:-1])}")
+        a_values = -torch.stack(q_values_list[:-1])
 
-        print("\n--- CONDITIONAL OPTIMIZATION LOGIC ---")
-        condition_tensor = v_values + optim_advantages
-        print(f"v_values shape: {v_values.shape}")
-        print(f"optim_advantages shape: {optim_advantages.shape}")
-        print(
-            f"condition_tensor (v_values + optim_advantages) shape: {condition_tensor.shape}"
-        )
-        print(f"q_targets shape for comparison: {q_targets.shape}")
-
-        mix_case = (condition_tensor < q_targets).detach().float()
-        print(f"mix_case shape: {mix_case.shape}")
-        print(
-            f"Broadcasting check: condition_tensor {condition_tensor.shape} < q_targets {q_targets.shape}"
-        )
-
-        print("\n--- UPSILON COMPUTATION ---")
-        term1 = (1 - self.rho * mix_case) * v_values
-        term2 = self.rho * mix_case * v_values.detach()
-        print(f"term1 shape: {term1.shape}")
-        print(f"term2 shape: {term2.shape}")
-
-        upsilon_values = term1 + term2
-        print(f"upsilon_values shape: {upsilon_values.shape}")
-
-        print("\n--- FINAL LOSS COMPUTATION ---")
-        target_diff = upsilon_values - q_targets
-        print(f"target_diff shape: {target_diff.shape}")
-        print(
-            f"Broadcasting: upsilon_values {upsilon_values.shape} - q_targets {q_targets.shape}"
-        )
+        mix_case = (v_values + a_values < q_targets).detach().float()
+        upsilon_values = (
+            1 - self.rho * mix_case
+        ) * v_values + self.rho * mix_case * v_values.detach()
 
         up_case = (v_values >= q_targets).detach().float()
-        print(f"up_case shape: {up_case.shape}")
-
-        z_term1 = optim_advantages**2
-        z_term2 = up_case * 2 * optim_advantages * target_diff
-        z_term3 = target_diff**2
-
-        print(f"z_term1 (advantages^2) shape: {z_term1.shape}")
-        print(f"z_term2 (interaction term) shape: {z_term2.shape}")
-        print(f"z_term3 (target_diff^2) shape: {z_term3.shape}")
-
-        z_values = z_term1 + z_term2 + z_term3
-        print(f"z_values shape: {z_values.shape}")
+        z_values = (
+            a_values**2
+            + up_case * 2 * a_values * (upsilon_values - q_targets)
+            + (upsilon_values - q_targets) ** 2
+        )
 
         va_loss = torch.mean(z_values)
-        print(f"va_loss (scalar): {va_loss.shape}")
 
-        total_loss = va_loss + q_loss
-        print(f"total_loss (scalar): {total_loss.shape}")
-        print("=== END CRITIC LOSS COMPUTATION ===\n")
-
-        return total_loss
-
-    # def _compute_critic_loss(
-    #     self,
-    #     states: torch.Tensor,
-    #     actions: torch.Tensor,
-    #     rewards: torch.Tensor,
-    #     next_states: torch.Tensor,
-    #     dones: torch.Tensor,
-    # ) -> torch.Tensor:
-    #     with torch.no_grad():
-    #         next_v_values = torch.stack(self.v_target_network(next_states))
-    #         v_targets = torch.min(next_v_values, dim=0)[0]
-    #         q_targets = rewards + self.gamma * (1.0 - dones.float()) * v_targets
-    #
-    #     v_values = torch.stack(self.v_network(states))
-    #
-    #     q_values = torch.stack(self.q_network(states, actions))
-    #     q_final = q_values[-1:]
-    #
-    #     abs_td = torch.abs(q_targets - q_final)
-    #     q_loss = torch.mean(abs_td**2)
-    #
-    #     optim_advantages = -q_values[:-1]
-    #
-    #     mix_case = (v_values + optim_advantages < q_targets).detach().float()
-    #     upsilon_values = (
-    #         1 - self.rho * mix_case
-    #     ) * v_values + self.rho * mix_case * v_values.detach()
-    #
-    #     target_diff = upsilon_values - q_targets
-    #     up_case = (v_values >= q_targets).detach().float()
-    #     z_values = (
-    #         optim_advantages**2
-    #         + up_case * 2 * optim_advantages * target_diff
-    #         + target_diff**2
-    #     )
-    #
-    #     va_loss = torch.mean(z_values)
-    #
-    #     return va_loss + q_loss
+        return va_loss + q_loss
 
     def _compute_policy_loss(
         self, states: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        actions, log_probs = self._compute_action_and_log_prob(states)
+        means, log_stds = self.policy_network(states)
 
-        q_values = self.q_network(states, actions)
-        q_value = q_values[-1]
-
-        alpha = self.log_alpha.exp().detach()
-        policy_loss = torch.mean(alpha * log_probs - q_value)
-
-        temperature_loss = torch.mean(
-            -self.log_alpha * (log_probs.detach() + self.target_entropy)
+        actions, log_probs = self._reparameterize_gaussian_and_tanh(
+            means, log_stds
         )
 
-        return policy_loss, temperature_loss
+        q_values = self.q_network(states, actions)[-1]
 
-    def _compute_action_and_log_prob(
-        self, state: torch.Tensor
+        mean_log_probs = log_probs.mean()
+        mean_q_values = q_values.mean()
+
+        alpha = self.log_alpha.exp().detach()
+        policy_loss = alpha * mean_log_probs - mean_q_values
+
+        return policy_loss, mean_log_probs.detach()
+
+    def _compute_temperature_loss(
+        self, mean_log_probs: torch.Tensor
+    ) -> torch.Tensor:
+        return -self.log_alpha * (self.target_entropy + mean_log_probs)
+
+    def _reparameterize_gaussian_and_tanh(
+        self, mean: torch.Tensor, log_std: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         #  N(mu_theta (s), sigma_theta (s)^2)
-        mean, log_std = self.policy_network(state)
-        gaussian = dist.Normal(mean, log_std.exp())
+        noise = torch.randn_like(mean)
+        raw_action = mean + noise * log_std.exp()
 
         # a = tanh(u), u ~ N
-        raw_action = gaussian.rsample()
         action = torch.tanh(raw_action)
 
-        # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
-        log_prob_gaussian = gaussian.log_prob(raw_action)
-        tanh_correction = torch.log(torch.relu(1 - action.pow(2)) + 1e-6)
-        log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
+        # log pi(u|s)
+        gaussian_log_prob = -0.5 * (
+            noise**2 + 2 * log_std + torch.log(torch.tensor(2.0 * math.pi))
+        )
+        # log(0, 1 - a^2)
+        tanh_correction = torch.log(torch.relu(1.0 - action**2) + 1e-6)
+
+        # log pi(a|s) =  log pi(u|s) - log(1 - a^2)
+        log_prob = (gaussian_log_prob - tanh_correction).sum(
+            axis=1, keepdims=True
+        )
 
         return action, log_prob
+
+    # def _compute_policy_loss(
+    #     self, states: torch.Tensor
+    # ) -> tuple[torch.Tensor, torch.Tensor]:
+    #     actions, log_probs = self._compute_action_and_log_prob(states)
+    #     q_values_list = self.q_network(states, actions)
+    #     q_value = q_values_list[-1]
+    #     alpha = self.log_alpha.exp().detach()
+    #     policy_loss = torch.mean(alpha * log_probs - q_value)
+    #     mean_log_probs = log_probs.mean()
+    #     temperature_loss_input = mean_log_probs.detach()
+    #     entropy_term = self.target_entropy + temperature_loss_input
+    #     temperature_loss = -self.log_alpha * entropy_term
+    #     return policy_loss, temperature_loss
+
+    # def _compute_policy_loss(
+    #     self, states: torch.Tensor
+    # ) -> tuple[torch.Tensor, torch.Tensor]:
+    #     actions, log_probs = self._compute_action_and_log_prob(states)
+    #
+    #     q_values = self.q_network(states, actions)
+    #     q_value = q_values[-1]
+    #
+    #     alpha = self.log_alpha.exp().detach()
+    #     policy_loss = torch.mean(alpha * log_probs - q_value)
+    #
+    #     temperature_loss = torch.mean(
+    #         -self.log_alpha * (log_probs.detach() + self.target_entropy)
+    #     )
+    #
+    #     return policy_loss, temperature_loss
+
+    # def _compute_action_and_log_prob(
+    #     self, state: torch.Tensor
+    # ) -> tuple[torch.Tensor, torch.Tensor]:
+    #     #  N(mu_theta (s), sigma_theta (s)^2)
+    #     mean, log_std = self.policy_network(state)
+    #     gaussian = dist.Normal(mean, log_std.exp())
+    #     raw_action = gaussian.rsample()
+    #     # a = tanh(u), u ~ N
+    #     action = torch.tanh(raw_action)
+    #     # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
+    #     log_prob_gaussian = gaussian.log_prob(raw_action)
+    #     tanh_correction = torch.log(torch.relu(1 - action.pow(2)) + 1e-6)
+    #     log_prob = (log_prob_gaussian - tanh_correction).sum(
+    #         dim=-1, keepdim=True
+    #     )
+    #     return action, log_prob
 
     class QNetwork(nn.Module):
         __slots__ = ["networks"]
