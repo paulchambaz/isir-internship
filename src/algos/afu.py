@@ -50,6 +50,7 @@ class AFU(RLAlgo):
     __slots__ = [
         "action_dim",
         "batch_size",
+        "buffer",
         "gamma",
         "learn_temperature",
         "log_alpha",
@@ -57,7 +58,6 @@ class AFU(RLAlgo):
         "policy_optimizer",
         "q_network",
         "q_optimizer",
-        "replay_buffer",
         "rho",
         "state_dim",
         "target_entropy",
@@ -127,7 +127,7 @@ class AFU(RLAlgo):
             else None
         )
 
-        self.replay_buffer = ReplayBuffer(replay_size, state_dim, action_dim)
+        self.buffer = ReplayBuffer(replay_size, state_dim, action_dim)
         self.batch_size = batch_size
 
         self.target_entropy = -action_dim
@@ -163,33 +163,33 @@ class AFU(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.replay_buffer.push(state, action, reward, next_state, done)
+        self.buffer.push(state, action, reward, next_state, done)
 
     def update(self) -> None:
-        if len(self.replay_buffer) < self.batch_size:
+        if len(self.buffer) < self.batch_size:
             return
 
-        states, actions, rewards, next_states, dones = (
-            self.replay_buffer.sample(self.batch_size)
+        states, actions, rewards, next_states, dones = self.buffer.sample(
+            self.batch_size
         )
 
-        self.q_optimizer.zero_grad()
-        self.v_optimizer.zero_grad()
         critic_loss = self._compute_critic_loss(
             states, actions, rewards, next_states, dones
         )
+        self.q_optimizer.zero_grad()
+        self.v_optimizer.zero_grad()
         critic_loss.backward()
         self.q_optimizer.step()
         self.v_optimizer.step()
 
-        self.policy_optimizer.zero_grad()
         policy_loss, mean_log_probs = self._compute_policy_loss(states)
+        self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()
 
         if self.learn_temperature:
-            self.temperature_optimizer.zero_grad()
             temperature_loss = self._compute_temperature_loss(mean_log_probs)
+            self.temperature_optimizer.zero_grad()
             temperature_loss.backward()
             self.temperature_optimizer.step()
 
@@ -204,7 +204,7 @@ class AFU(RLAlgo):
             "q_optimizer": self.q_optimizer.state_dict(),
             "v_optimizer": self.v_optimizer.state_dict(),
             "policy_optimizer": self.policy_optimizer.state_dict(),
-            "replay_buffer": self.replay_buffer.get_data(),
+            "replay_buffer": self.buffer.get_data(),
         }
 
         state["log_alpha"] = (
@@ -226,7 +226,7 @@ class AFU(RLAlgo):
         self.q_optimizer.load_state_dict(state["q_optimizer"])
         self.v_optimizer.load_state_dict(state["v_optimizer"])
         self.policy_optimizer.load_state_dict(state["policy_optimizer"])
-        self.replay_buffer.load_data(state["replay_buffer"])
+        self.buffer.load_data(state["replay_buffer"])
 
         if self.learn_temperature:
             self.log_alpha.data = torch.tensor(state["log_alpha"])
@@ -281,8 +281,21 @@ class AFU(RLAlgo):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         means, log_stds = self.policy_network(states)
 
-        actions, log_probs = self._reparameterize_gaussian_and_tanh(
-            means, log_stds
+        #  N(mu_theta (s), sigma_theta (s)^2)
+        noise = torch.randn_like(means)
+        raw_action = means + noise * log_stds.exp()
+        actions = torch.tanh(raw_action)
+
+        # log pi(u|s)
+        gaussian_log_probs = -0.5 * (
+            noise**2 + 2 * log_stds + torch.log(torch.tensor(2.0 * math.pi))
+        )
+        # log(0, 1 - a^2)
+        tanh_corrections = torch.log(torch.relu(1.0 - actions**2) + 1e-6)
+
+        # log pi(a|s) =  log pi(u|s) - log(1 - a^2)
+        log_probs = (gaussian_log_probs - tanh_corrections).sum(
+            axis=1, keepdims=True
         )
 
         q_values = self.q_network(states, actions)[-1]
@@ -299,78 +312,6 @@ class AFU(RLAlgo):
         self, mean_log_probs: torch.Tensor
     ) -> torch.Tensor:
         return -self.log_alpha * (self.target_entropy + mean_log_probs)
-
-    def _reparameterize_gaussian_and_tanh(
-        self, mean: torch.Tensor, log_std: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        #  N(mu_theta (s), sigma_theta (s)^2)
-        noise = torch.randn_like(mean)
-        raw_action = mean + noise * log_std.exp()
-
-        # a = tanh(u), u ~ N
-        action = torch.tanh(raw_action)
-
-        # log pi(u|s)
-        gaussian_log_prob = -0.5 * (
-            noise**2 + 2 * log_std + torch.log(torch.tensor(2.0 * math.pi))
-        )
-        # log(0, 1 - a^2)
-        tanh_correction = torch.log(torch.relu(1.0 - action**2) + 1e-6)
-
-        # log pi(a|s) =  log pi(u|s) - log(1 - a^2)
-        log_prob = (gaussian_log_prob - tanh_correction).sum(
-            axis=1, keepdims=True
-        )
-
-        return action, log_prob
-
-    # def _compute_policy_loss(
-    #     self, states: torch.Tensor
-    # ) -> tuple[torch.Tensor, torch.Tensor]:
-    #     actions, log_probs = self._compute_action_and_log_prob(states)
-    #     q_values_list = self.q_network(states, actions)
-    #     q_value = q_values_list[-1]
-    #     alpha = self.log_alpha.exp().detach()
-    #     policy_loss = torch.mean(alpha * log_probs - q_value)
-    #     mean_log_probs = log_probs.mean()
-    #     temperature_loss_input = mean_log_probs.detach()
-    #     entropy_term = self.target_entropy + temperature_loss_input
-    #     temperature_loss = -self.log_alpha * entropy_term
-    #     return policy_loss, temperature_loss
-
-    # def _compute_policy_loss(
-    #     self, states: torch.Tensor
-    # ) -> tuple[torch.Tensor, torch.Tensor]:
-    #     actions, log_probs = self._compute_action_and_log_prob(states)
-    #
-    #     q_values = self.q_network(states, actions)
-    #     q_value = q_values[-1]
-    #
-    #     alpha = self.log_alpha.exp().detach()
-    #     policy_loss = torch.mean(alpha * log_probs - q_value)
-    #
-    #     temperature_loss = torch.mean(
-    #         -self.log_alpha * (log_probs.detach() + self.target_entropy)
-    #     )
-    #
-    #     return policy_loss, temperature_loss
-
-    # def _compute_action_and_log_prob(
-    #     self, state: torch.Tensor
-    # ) -> tuple[torch.Tensor, torch.Tensor]:
-    #     #  N(mu_theta (s), sigma_theta (s)^2)
-    #     mean, log_std = self.policy_network(state)
-    #     gaussian = dist.Normal(mean, log_std.exp())
-    #     raw_action = gaussian.rsample()
-    #     # a = tanh(u), u ~ N
-    #     action = torch.tanh(raw_action)
-    #     # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
-    #     log_prob_gaussian = gaussian.log_prob(raw_action)
-    #     tanh_correction = torch.log(torch.relu(1 - action.pow(2)) + 1e-6)
-    #     log_prob = (log_prob_gaussian - tanh_correction).sum(
-    #         dim=-1, keepdim=True
-    #     )
-    #     return action, log_prob
 
     class QNetwork(nn.Module):
         __slots__ = ["networks"]

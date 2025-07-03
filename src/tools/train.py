@@ -209,6 +209,7 @@ def main() -> None:
     tau = 0.005
     gamma = 0.999
     alpha = None
+    seed = 42
 
     match args.algo:
         case "sac":
@@ -239,11 +240,12 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 rho=0.7,
+                seed=seed,
             )
         case "afup":
             agent = algos.AFUP(
-                action_dim=action_dim,
                 state_dim=state_dim,
+                action_dim=action_dim,
                 hidden_dims=hidden_dims,
                 replay_size=replay_size,
                 batch_size=batch_size,
@@ -254,6 +256,7 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 rho=0.7,
+                seed=seed,
             )
         case "tqc":
             agent = algos.TQC(

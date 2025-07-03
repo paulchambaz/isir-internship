@@ -11,7 +11,8 @@
 __version__ = "0.1.0"
 __author__ = "Paul Chambaz"
 
-from .afu import AFU
+# from .afu import AFU
+from .afu3 import AFU
 from .afup import AFUP
 from .rl_algo import RLAlgo
 from .sac import SAC

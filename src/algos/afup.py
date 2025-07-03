@@ -1,7 +1,7 @@
 import numpy as np
 
 # from afu_rljax.algorithm import AFU
-from .afu2 import AFU
+from .afu3 import AFU
 from .rl_algo import RLAlgo
 
 
@@ -12,8 +12,8 @@ class AFUP(RLAlgo):
 
     def __init__(
         self,
-        action_dim: int,
         state_dim: int,
+        action_dim: int,
         hidden_dims: list[int],
         replay_size: int,
         batch_size: int,

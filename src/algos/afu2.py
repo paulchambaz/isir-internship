@@ -1,4 +1,10 @@
-# afu2.py
+# Copyright (C) 2025 Paul Chambaz
+# This file is part of isir-internship.
+#
+# isir-internship is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 
 import math
 from functools import partial
@@ -10,6 +16,38 @@ import numpy as np
 import optax as optix
 from haiku import PRNGSequence
 from jax import nn
+
+
+def build_mlp(
+    x: jnp.ndarray,
+    num_networks: int,
+    hidden_dims: list[int],
+    output_dim: int,
+) -> list[jnp.ndarray]:
+    def _forward(x: jnp.ndarray) -> jnp.ndarray:
+        for hidden_dim in hidden_dims:
+            x = jax.nn.relu(
+                hk.Linear(
+                    hidden_dim,
+                    w_init=hk.initializers.Orthogonal(scale=math.sqrt(2)),
+                )(x)
+            )
+
+        return hk.Linear(
+            output_dim, w_init=hk.initializers.Orthogonal(scale=1)
+        )(x)
+
+    return [_forward(x) for _ in range(num_networks)]
+
+
+def create_network(
+    forward: callable, input_dims: list[int], key: jnp.ndarray
+) -> tuple:
+    network = hk.without_apply_rng(hk.transform(forward))
+    params = network.init(
+        key, *[np.zeros((1, dim), dtype=np.float32) for dim in input_dims]
+    )
+    return network, params
 
 
 class ReplayBuffer:
@@ -113,40 +151,25 @@ class AFU:
         self.state_dim = state_dim
         self.action_dim = action_dim
 
-        self.q_network = hk.without_apply_rng(
-            hk.transform(
-                lambda s, a: self.QNetwork(
-                    num_critics=3, hidden_units=units_critic
-                )(s, a)
-            )
-        )
-        self.q_params = self.q_network.init(
-            next(self.rng),
-            np.zeros((1, state_dim), dtype=np.float32),
-            np.zeros((1, action_dim), dtype=np.float32),
+        self.q_network, self.q_params = AFU.build_q_network(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            hidden_dims=units_critic,
+            key=next(self.rng),
         )
 
-        self.v_network = hk.without_apply_rng(
-            hk.transform(
-                lambda s: self.VNetwork(
-                    num_critics=2, hidden_units=units_critic
-                )(s)
-            )
-        )
-        self.v_params = self.v_network.init(
-            next(self.rng), np.zeros((1, state_dim), dtype=np.float32)
+        self.v_network, self.v_params = AFU.build_v_network(
+            state_dim=state_dim,
+            hidden_dims=units_critic,
+            key=next(self.rng),
         )
         self.v_target_params = self.v_params
 
-        self.policy_network = hk.without_apply_rng(
-            hk.transform(
-                lambda s: self.PolicyNetwork(
-                    action_dim=action_dim, hidden_units=units_actor
-                )(s)
-            )
-        )
-        self.policy_params = self.policy_network.init(
-            next(self.rng), np.zeros((1, state_dim), dtype=np.float32)
+        self.policy_network, self.policy_params = AFU.build_policy_network(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            hidden_dims=units_critic,
+            key=next(self.rng),
         )
 
         self.log_alpha = jnp.array(np.log(1.0), dtype=jnp.float32)
@@ -201,29 +224,25 @@ class AFU:
         key: jnp.ndarray,
     ) -> jnp.ndarray:
         mean, log_std = self.policy_network.apply(policy_params, state)
-        action, _ = self._reparameterize_gaussian_and_tanh(
-            mean=mean, log_std=log_std, key=key
-        )
-        return action
+        noise = jax.random.normal(key, mean.shape)
+        raw_action = mean + noise * jnp.exp(log_std)
+        return jnp.tanh(raw_action)
 
     def update(self) -> None:
-        state, action, reward, next_state, done = self.buffer.sample(
+        states, actions, reward, next_states, dones = self.buffer.sample(
             self.batch_size, next(self.rng)
         )
 
         # Update critic and value networks together
-        loss_critic, grad = jax.value_and_grad(
-            self._compute_critic_loss, argnums=(0, 1)
-        )(
+        _, grad = jax.value_and_grad(self._compute_critic_loss, argnums=(0, 1))(
             self.q_params,
             self.v_params,
             v_target_params=self.v_target_params,
-            state=state,
-            action=action,
-            reward=reward,
-            next_state=next_state,
-            done=done,
-            rho=self.rho,
+            states=states,
+            actions=actions,
+            rewards=reward,
+            next_states=next_states,
+            dones=dones,
         )
 
         update, self.q_optim_state = self.q_optim(grad[0], self.q_optim_state)
@@ -232,14 +251,14 @@ class AFU:
         self.v_params = optix.apply_updates(self.v_params, update)
 
         # Update actor
-        (loss_actor, mean_log_pi), grad = jax.value_and_grad(
+        (_, mean_log_probs), grad = jax.value_and_grad(
             self._compute_policy_loss, has_aux=True
         )(
             self.policy_params,
             q_params=self.q_params,
             v_params=self.v_params,
             log_alpha=self.log_alpha,
-            state=state,
+            states=states,
             key=next(self.rng),
         )
 
@@ -249,9 +268,9 @@ class AFU:
         self.policy_params = optix.apply_updates(self.policy_params, update)
 
         # Update alpha
-        loss_alpha, grad = jax.value_and_grad(self._compute_temperature_loss)(
+        _, grad = jax.value_and_grad(self._compute_temperature_loss)(
             self.log_alpha,
-            mean_log_pi=mean_log_pi,
+            mean_log_probs=mean_log_probs,
         )
         update, self.temperature_optim_state = self.temperature_optim(
             grad, self.temperature_optim_state
@@ -269,23 +288,24 @@ class AFU:
         q_params: hk.Params,
         v_params: hk.Params,
         v_target_params: hk.Params,
-        state: np.ndarray,
-        action: np.ndarray,
-        reward: np.ndarray,
-        next_state: np.ndarray,
-        done: np.ndarray,
-        rho: float,
+        states: np.ndarray,
+        actions: np.ndarray,
+        rewards: np.ndarray,
+        next_states: np.ndarray,
+        dones: np.ndarray,
     ) -> jnp.ndarray:
-        next_v_values = self.v_network.apply(v_target_params, next_state)
-        v_targets = jnp.min(jnp.asarray(next_v_values), axis=0)
+        v_targets_list = jnp.asarray(
+            self.v_network.apply(v_target_params, next_states)
+        )
+        v_targets = jnp.min(v_targets_list, axis=0)
 
         q_targets = jax.lax.stop_gradient(
-            reward + self.gamma * (1.0 - done) * v_targets
+            rewards + self.gamma * (1.0 - dones) * v_targets
         )
 
-        v_values = jnp.asarray(self.v_network.apply(v_params, state))
+        v_values = jnp.asarray(self.v_network.apply(v_params, states))
 
-        q_values_list = self.q_network.apply(q_params, state, action)
+        q_values_list = self.q_network.apply(q_params, states, actions)
         q_values = jnp.asarray(q_values_list[-1:])
 
         abs_td = jnp.abs(q_targets - q_values)
@@ -295,8 +315,8 @@ class AFU:
 
         mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
         upsilon_values = (
-            1 - rho * mix_case
-        ) * v_values + rho * mix_case * jax.lax.stop_gradient(v_values)
+            1 - self.rho * mix_case
+        ) * v_values + self.rho * mix_case * jax.lax.stop_gradient(v_values)
 
         up_case = jax.lax.stop_gradient(v_values >= q_targets)
         z_values = (
@@ -316,30 +336,41 @@ class AFU:
         q_params: hk.Params,
         v_params: hk.Params,
         log_alpha: jnp.ndarray,
-        state: np.ndarray,
+        states: np.ndarray,
         key: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mean, log_std = self.policy_network.apply(policy_params, state)
+        means, log_std = self.policy_network.apply(policy_params, states)
 
-        action, log_pi = self._reparameterize_gaussian_and_tanh(
-            mean=mean, log_std=log_std, key=key
+        noise = jax.random.normal(key, means.shape)
+        raw_action = means + noise * jnp.exp(log_std)
+        actions = jnp.tanh(raw_action)
+
+        gaussian_log_probs = -0.5 * (
+            jnp.square(noise) + 2 * log_std + jnp.log(2 * math.pi)
         )
-        q_list = self.q_network.apply(q_params, state, action)
+        tanh_corrections = jnp.log(nn.relu(1.0 - jnp.square(actions)) + 1e-6)
 
-        mean_log_pi = log_pi.mean()
+        log_probs = (gaussian_log_probs - tanh_corrections).sum(
+            axis=1, keepdims=True
+        )
 
-        mean_q = q_list[-1].mean()
-        loss = jax.lax.stop_gradient(jnp.exp(log_alpha)) * mean_log_pi - mean_q
+        q_values = self.q_network.apply(q_params, states, actions)[-1]
 
-        return loss, jax.lax.stop_gradient(mean_log_pi)
+        mean_log_probs = log_probs.mean()
+        mean_q_values = q_values.mean()
+
+        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
+        policy_loss = alpha * mean_log_probs - mean_q_values
+
+        return policy_loss, jax.lax.stop_gradient(mean_log_probs)
 
     @partial(jax.jit, static_argnums=0)
     def _compute_temperature_loss(
         self,
         log_alpha: jnp.ndarray,
-        mean_log_pi: jnp.ndarray,
+        mean_log_probs: jnp.ndarray,
     ) -> jnp.ndarray:
-        return -log_alpha * (self.target_entropy + mean_log_pi)
+        return -log_alpha * (self.target_entropy + mean_log_probs)
 
     @partial(jax.jit, static_argnums=0)
     def _soft_update(
@@ -352,94 +383,54 @@ class AFU:
             lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
         )
 
-    @partial(jax.jit, static_argnums=0)
-    def _reparameterize_gaussian_and_tanh(
-        self,
-        mean: jnp.ndarray,
-        log_std: jnp.ndarray,
+    @staticmethod
+    def build_q_network(
+        state_dim: int,
+        action_dim: int,
+        hidden_dims: list[int],
         key: jnp.ndarray,
-    ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        std = jnp.exp(log_std)
-        noise = jax.random.normal(key, std.shape)
-        action = jnp.tanh(mean + noise * std)
+    ) -> tuple:
+        def forward(states: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+            return build_mlp(
+                x=jnp.concatenate([states, actions], axis=1),
+                num_networks=3,
+                hidden_dims=hidden_dims,
+                output_dim=1,
+            )
 
-        gaussian_log_prob = -0.5 * (
-            jnp.square(noise) + 2 * log_std + jnp.log(2 * math.pi)
-        )
-        tanh_correction = jnp.log(nn.relu(1.0 - jnp.square(action)) + 1e-6)
+        return create_network(forward, [state_dim, action_dim], key)
 
-        log_pi = (gaussian_log_prob - tanh_correction).sum(
-            axis=1, keepdims=True
-        )
+    @staticmethod
+    def build_v_network(
+        state_dim: int, hidden_dims: list[int], key: jnp.ndarray
+    ) -> tuple:
+        def forward(states: jnp.ndarray) -> jnp.ndarray:
+            return build_mlp(
+                x=states,
+                num_networks=2,
+                hidden_dims=hidden_dims,
+                output_dim=1,
+            )
 
-        return action, log_pi
+        return create_network(forward, [state_dim], key)
 
-    class QNetwork(hk.Module):
-        def __init__(self, num_critics: int, hidden_units: list[int]) -> None:
-            super().__init__()
-            self.num_critics = num_critics
-            self.hidden_units = hidden_units
-
-        def __call__(
-            self, state: jnp.ndarray, action: jnp.ndarray
-        ) -> list[jnp.ndarray]:
-            def _fn(x: jnp.ndarray) -> jnp.ndarray:
-                for hidden_dim in self.hidden_units:
-                    x = nn.relu(
-                        hk.Linear(
-                            hidden_dim,
-                            w_init=hk.initializers.Orthogonal(scale=np.sqrt(2)),
-                        )(x)
-                    )
-
-                return hk.Linear(1, w_init=hk.initializers.Orthogonal())(x)
-
-            state_action = jnp.concatenate([state, action], axis=1)
-            return [_fn(state_action) for _ in range(self.num_critics)]
-
-    class VNetwork(hk.Module):
-        def __init__(self, num_critics: int, hidden_units: list[int]) -> None:
-            super().__init__()
-            self.num_critics = num_critics
-            self.hidden_units = hidden_units
-
-        def __call__(self, state: jnp.ndarray) -> list[jnp.ndarray]:
-            def _fn(x: jnp.ndarray) -> jnp.ndarray:
-                for hidden_dim in self.hidden_units:
-                    x = nn.relu(
-                        hk.Linear(
-                            hidden_dim,
-                            w_init=hk.initializers.Orthogonal(scale=np.sqrt(2)),
-                        )(x)
-                    )
-                return hk.Linear(1, w_init=hk.initializers.Orthogonal())(x)
-
-            return [_fn(state) for _ in range(self.num_critics)]
-
-    class PolicyNetwork(hk.Module):
-        def __init__(self, action_dim: int, hidden_units: list[int]) -> None:
-            super().__init__()
-            self.action_dim = action_dim
-            self.hidden_units = hidden_units
-
-        def __call__(
-            self, state: jnp.ndarray
-        ) -> tuple[jnp.ndarray, jnp.ndarray]:
-            def _fn(x: jnp.ndarray) -> jnp.ndarray:
-                for hidden_dim in self.hidden_units:
-                    x = nn.relu(
-                        hk.Linear(
-                            hidden_dim,
-                            w_init=hk.initializers.Orthogonal(scale=np.sqrt(2)),
-                        )(x)
-                    )
-                return hk.Linear(
-                    2 * self.action_dim,
-                    w_init=hk.initializers.Orthogonal(),
-                )(x)
-
-            output = _fn(state)
+    @staticmethod
+    def build_policy_network(
+        state_dim: int,
+        action_dim: int,
+        hidden_dims: list[int],
+        key: jnp.ndarray,
+    ) -> tuple:
+        def forward(states: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+            output = build_mlp(
+                x=states,
+                num_networks=1,
+                hidden_dims=hidden_dims,
+                output_dim=2 * action_dim,
+            )[0]
 
             mean, log_std = jnp.split(output, 2, axis=1)
             log_std = jnp.clip(log_std, -10.0, 2.0)
             return mean, log_std
+
+        return create_network(forward, [state_dim], key)

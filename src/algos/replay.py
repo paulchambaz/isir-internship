@@ -13,12 +13,12 @@ import torch
 
 class ReplayBuffer:
     __slots__ = (
-        "_n",
-        "_p",
         "action",
         "buffer_size",
         "done",
+        "n",
         "next_state",
+        "p",
         "reward",
         "state",
     )
@@ -30,8 +30,8 @@ class ReplayBuffer:
         action_dim: int,
     ) -> None:
         self.buffer_size = buffer_size
-        self._n = 0
-        self._p = 0
+        self.n = 0
+        self.p = 0
 
         self.state = np.empty((buffer_size, state_dim), dtype=np.float32)
         self.action = np.empty((buffer_size, action_dim), dtype=np.float32)
@@ -47,23 +47,22 @@ class ReplayBuffer:
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.state[self._p] = state
-        self.action[self._p] = action
-        self.reward[self._p] = reward
-        self.next_state[self._p] = next_state
-        self.done[self._p] = float(done)
+        self.state[self.p] = state
+        self.action[self.p] = action
+        self.reward[self.p] = float(reward)
+        self.next_state[self.p] = next_state
+        self.done[self.p] = float(done)
 
-        self._p = (self._p + 1) % self.buffer_size
-        self._n = min(self._n + 1, self.buffer_size)
+        self.p = (self.p + 1) % self.buffer_size
+        self.n = min(self.n + 1, self.buffer_size)
 
     def sample(
         self, batch_size: int
     ) -> tuple[
         torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
     ]:
-        # TODO: pass it correctly
         rng = np.random.default_rng()
-        idxes = rng.integers(0, self._n, size=batch_size)
+        idxes = rng.integers(0, self.n, size=batch_size)
 
         states = torch.from_numpy(self.state[idxes])
         actions = torch.from_numpy(self.action[idxes])
@@ -77,7 +76,7 @@ class ReplayBuffer:
         self,
     ) -> list[tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]]:
         data = []
-        for i in range(self._n):
+        for i in range(self.n):
             data.append(
                 (
                     self.state[i].copy(),
@@ -100,8 +99,8 @@ class ReplayBuffer:
             self.reward[i] = reward
             self.next_state[i] = next_state
             self.done[i] = float(done)
-        self._n = n
-        self._p = n % self.buffer_size
+        self.n = n
+        self.p = n % self.buffer_size
 
     def __len__(self) -> int:
-        return self._n
+        return self.n

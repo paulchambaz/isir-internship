@@ -3,7 +3,7 @@
 
 # Run the main program
 run:
-  @just train --env mountaincar --algo afu
+  @just train --env mountaincar --algo afup
 
 # Run main training script
 train *ARGS:

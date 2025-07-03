@@ -6,6 +6,7 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
+
 import torch
 from torch import nn
 
@@ -26,5 +27,5 @@ def soft_update_target(
             target_net.parameters(), source_net.parameters(), strict=True
         ):
             target_param.data.copy_(
-                tau * source_param.data + (1.0 - tau) * target_param.data
+                (1.0 - tau) * target_param.data + tau * source_param.data
             )
