@@ -265,12 +265,77 @@ class AFU(RLAlgo):
             return
 
         self.key, sample_key = random.split(self.key)
-        states, actions, reward, next_states, dones = self.buffer.sample(
+        states, actions, rewards, next_states, dones = self.buffer.sample(
             self.batch_size, sample_key
         )
 
-        # Update critic and value networks together
-        critic_loss, (q_grad, v_grad) = jax.value_and_grad(
+        (
+            self.q_params,
+            self.v_params,
+            self.q_opt_state,
+            self.v_opt_state,
+        ) = self._update_critic_and_value(
+            self.q_params,
+            self.v_params,
+            self.q_opt_state,
+            self.v_opt_state,
+            self.v_target_params,
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+        )
+
+        self.key, policy_key = random.split(self.key)
+        (
+            self.policy_params,
+            self.policy_opt_state,
+            mean_log_probs,
+        ) = self._update_actor_policy(
+            self.policy_params,
+            self.policy_opt_state,
+            self.q_params,
+            self.v_params,
+            self.log_alpha,
+            states,
+            policy_key,
+        )
+
+        if self.learn_temperature:
+            (
+                self.log_alpha,
+                self.temperature_opt_state,
+            ) = self._update_temperature(
+                self.log_alpha,
+                self.temperature_opt_state,
+                mean_log_probs,
+            )
+
+        self.v_target_params = self._soft_update(
+            self.v_target_params, self.v_params, self.tau
+        )
+
+    @partial(jax.jit, static_argunms=(0,))
+    def _update_critic_and_value(
+        self,
+        q_params: dict[str, jax.Array],
+        v_params: dict[str, jax.Array],
+        q_opt_state: optax.OptState,
+        v_opt_state: optax.OptState,
+        v_target_params: dict[str, jax.Array],
+        states: jnp.ndarray,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
+    ) -> tuple[
+        dict[str, jax.Array],
+        dict[str, jax.Array],
+        optax.OptState,
+        optax.OptState,
+    ]:
+        _, (q_grad, v_grad) = jax.value_and_grad(
             self._compute_critic_loss, argnums=(0, 1), has_aux=False
         )(
             self.q_params,
@@ -278,57 +343,71 @@ class AFU(RLAlgo):
             v_target_params=self.v_target_params,
             states=states,
             actions=actions,
-            rewards=reward,
+            rewards=rewards,
             next_states=next_states,
             dones=dones,
         )
 
-        q_updates, self.q_opt_state = self.q_optimizer.update(
-            q_grad, self.q_opt_state
+        q_updates, new_q_opt_state = self.q_optimizer.update(
+            q_grad, q_opt_state
         )
-        self.q_params = optax.apply_updates(self.q_params, q_updates)
+        new_q_params = optax.apply_updates(q_params, q_updates)
 
-        v_updates, self.v_opt_state = self.v_optimizer.update(
-            v_grad, self.v_opt_state
+        v_updates, new_v_opt_state = self.v_optimizer.update(
+            v_grad, v_opt_state
         )
-        self.v_params = optax.apply_updates(self.v_params, v_updates)
+        new_v_params = optax.apply_updates(v_params, v_updates)
 
-        self.key, policy_key = random.split(self.key)
-        (policy_loss, mean_log_probs), policy_grad = jax.value_and_grad(
+        return new_q_params, new_v_params, new_q_opt_state, new_v_opt_state
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_actor_policy(
+        self,
+        policy_params: dict[str, jax.Array],
+        policy_opt_state: optax.OptState,
+        q_params: dict[str, jax.Array],
+        v_params: dict[str, jax.Array],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState, jax.Array]:
+        (_, mean_log_probs), policy_grad = jax.value_and_grad(
             self._compute_policy_loss, has_aux=True
         )(
-            self.policy_params,
-            q_params=self.q_params,
-            v_params=self.v_params,
-            log_alpha=self.log_alpha,
+            policy_params,
+            q_params=q_params,
+            v_params=v_params,
+            log_alpha=log_alpha,
             states=states,
-            key=policy_key,
+            key=key,
         )
 
-        policy_updates, self.policy_opt_state = self.policy_optimizer.update(
-            policy_grad, self.policy_opt_state
+        policy_updates, new_policy_opt_state = self.policy_optimizer.update(
+            policy_grad, policy_opt_state
         )
-        self.policy_params = optax.apply_updates(
-            self.policy_params, policy_updates
-        )
+        new_policy_params = optax.apply_updates(policy_params, policy_updates)
 
-        if self.learn_temperature:
-            temperature_loss, temperature_grad = jax.value_and_grad(
-                self._compute_temperature_loss
-            )(self.log_alpha, mean_log_probs)
+        return new_policy_params, new_policy_opt_state, mean_log_probs
 
-            temperature_updates, self.temperature_opt_state = (
-                self.temperature_optimizer.update(
-                    temperature_grad, self.temperature_opt_state
-                )
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_temperature(
+        self,
+        log_alpha: jax.Array,
+        temperature_opt_state: optax.OptState,
+        mean_log_probs: jax.Array,
+    ) -> tuple[jax.Array, optax.OptState]:
+        _, temperature_grad = jax.value_and_grad(
+            self._compute_temperature_loss
+        )(log_alpha, mean_log_probs)
+
+        temperature_updates, new_temperature_opt_state = (
+            self.temperature_optimizer.update(
+                temperature_grad, temperature_opt_state
             )
-            self.log_alpha = optax.apply_updates(
-                self.log_alpha, temperature_updates
-            )
-
-        self.v_target_params = self._soft_update(
-            self.v_target_params, self.v_params, self.tau
         )
+        new_log_alpha = optax.apply_updates(log_alpha, temperature_updates)
+
+        return new_log_alpha, new_temperature_opt_state
 
     @partial(jax.jit, static_argnums=0)
     def _compute_critic_loss(
@@ -420,7 +499,7 @@ class AFU(RLAlgo):
     ) -> jnp.ndarray:
         return -log_alpha * (self.target_entropy + mean_log_probs)
 
-    @partial(jax.jit, static_argnums=0)
+    @partial(jax.jit, static_argnums=(0,))
     def _soft_update(
         self,
         target_params: dict[str, any],

@@ -248,8 +248,8 @@ class AFU(RLAlgo):
         v_targets = torch.min(v_targets_list, dim=0)[0]
 
         q_targets = (
-            rewards + self.gamma * (1.0 - dones.float()) * v_targets.detach()
-        )
+            rewards + self.gamma * (1.0 - dones.float()) * v_targets
+        ).detach()
 
         v_values = torch.stack(self.v_network(states))
 
