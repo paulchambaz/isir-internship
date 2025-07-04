@@ -316,7 +316,7 @@ class AFU(RLAlgo):
             self.v_target_params, self.v_params, self.tau
         )
 
-    @partial(jax.jit, static_argunms=(0,))
+    @partial(jax.jit, static_argnums=(0,))
     def _update_critic_and_value(
         self,
         q_params: dict[str, jax.Array],
