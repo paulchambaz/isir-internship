@@ -13,6 +13,7 @@ import math
 import numpy as np
 import torch
 import torch.distributions as dist
+from jax.random import PRNGKey
 from torch import nn
 
 from .replay import ReplayBuffer
@@ -59,6 +60,7 @@ class AFU(RLAlgo):
         "q_network",
         "q_optimizer",
         "rho",
+        "rng",
         "state_dim",
         "target_entropy",
         "tau",
@@ -85,6 +87,9 @@ class AFU(RLAlgo):
         seed: int,
         state: dict | None = None,
     ) -> None:
+        self.rng = torch.Generator()
+        self.rng.manual_seed(seed)
+
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.learn_temperature = alpha is None
@@ -170,9 +175,16 @@ class AFU(RLAlgo):
         if len(self.buffer) < self.batch_size:
             return
 
+        new_seed = torch.randint(0, 2**31 - 1, (1,), generator=self.rng).item()
         states, actions, rewards, next_states, dones = self.buffer.sample(
-            self.batch_size
+            self.batch_size, PRNGKey(new_seed)
         )
+
+        states = torch.from_numpy(states)
+        actions = torch.from_numpy(actions)
+        rewards = torch.from_numpy(rewards)
+        next_states = torch.from_numpy(next_states)
+        dones = torch.from_numpy(dones)
 
         critic_loss = self._compute_critic_loss(
             states, actions, rewards, next_states, dones
