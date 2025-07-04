@@ -33,7 +33,7 @@ def train(
     count: int,
 ) -> tuple[algos.RLAlgo, dict]:
     if train_env.spec.id == "MountainCarContinuous-v0":
-        expert_transitions = expert_mountaincar(train_env, count=20)
+        expert_transitions = expert_mountaincar(train_env, count=5)
         for state, action, reward, next_state, done in expert_transitions:
             agent.push_buffer(state, action, reward, next_state, done)
 
@@ -218,12 +218,12 @@ def main() -> None:
 
     action_dim = train_env.action_space.shape[0]
     state_dim = train_env.observation_space.shape[0]
-    hidden_dims = [256, 256]
+    hidden_dims = [64, 64]
     replay_size = 200_000
     batch_size = 256
     lr = 3e-4
     tau = 0.005
-    gamma = 0.999
+    gamma = 0.99
     alpha = None
     seed = 42
 
@@ -304,8 +304,8 @@ def main() -> None:
         test_env=test_env,
         steps=args.steps,
         warmup=10000,
-        train_freq=32,
-        gradient_steps=32,
+        train_freq=4,
+        gradient_steps=4,
         test_freq=50,
         count=args.runs,
     )
