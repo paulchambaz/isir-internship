@@ -1,7 +1,8 @@
 import numpy as np
 
-# from afu_rljax.algorithm import AFU
-from .afu2 import AFU
+from afu_rljax.algorithm import AFU
+
+# from .afu2 import AFU
 from .rl_algo import RLAlgo
 
 
@@ -25,10 +26,27 @@ class AFUP(RLAlgo):
         gamma: float,
         alpha: float,
         seed: int,
+        action_space: any,
+        state_space: any,
     ) -> None:
+        # self.algo = AFU(
+        #     state_dim=state_dim,
+        #     action_dim=action_dim,
+        #     units_actor=hidden_dims,
+        #     units_critic=hidden_dims,
+        #     buffer_size=replay_size,
+        #     batch_size=batch_size,
+        #     lr_actor=policy_lr,
+        #     lr_critic=critic_lr,
+        #     lr_alpha=temperature_lr,
+        #     tau=tau,
+        #     rho=rho,
+        #     gamma=gamma,
+        #     seed=seed,
+        # )
         self.algo = AFU(
-            state_dim=state_dim,
-            action_dim=action_dim,
+            action_space=action_space,
+            state_space=state_space,
             units_actor=hidden_dims,
             units_critic=hidden_dims,
             buffer_size=replay_size,
@@ -37,13 +55,19 @@ class AFUP(RLAlgo):
             lr_critic=critic_lr,
             lr_alpha=temperature_lr,
             tau=tau,
-            rho=rho,
+            gradient_reduction=rho,
             gamma=gamma,
-            seed=seed,
+            seed=42,
+            num_agent_steps=100_000,
         )
 
     def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
-        return self.algo.select_action(state, evaluation)
+        # return self.algo.select_action(state, evaluation)
+        return (
+            self.algo.select_action(state)
+            if evaluation
+            else self.algo.explore(state)
+        )
 
     def push_buffer(
         self,
@@ -53,7 +77,14 @@ class AFUP(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.algo.buffer.push(state, action, reward, next_state, done)
+        self.algo.buffer.append(
+            state=state,
+            action=action,
+            reward=reward,
+            done=done,
+            next_state=next_state,
+        )
+        # self.algo.buffer.push(state, action, reward, next_state, done)
 
     def update(self) -> None:
         self.algo.update()

@@ -257,6 +257,8 @@ def main() -> None:
                 alpha=alpha,
                 rho=0.7,
                 seed=seed,
+                state_space=train_env.observation_space,
+                action_space=train_env.action_space,
             )
         case "tqc":
             agent = algos.TQC(
