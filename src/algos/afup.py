@@ -33,8 +33,8 @@ class AFUP(RLAlgo):
         gamma: float,
         alpha: float,
         seed: int,
-        action_space: any,
-        state_space: any,
+        # action_space: any,
+        # state_space: any,
     ) -> None:
         self.algo = AFU(
             state_dim=state_dim,
