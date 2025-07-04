@@ -33,7 +33,7 @@ def train(
     count: int,
 ) -> tuple[algos.RLAlgo, dict]:
     if train_env.spec.id == "MountainCarContinuous-v0":
-        expert_transitions = expert_mountaincar(train_env, count=10)
+        expert_transitions = expert_mountaincar(train_env, count=20)
         for state, action, reward, next_state, done in expert_transitions:
             agent.push_buffer(state, action, reward, next_state, done)
 
