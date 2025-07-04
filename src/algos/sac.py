@@ -6,16 +6,19 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
-import itertools
+import math
+from functools import partial
 
+import flax.linen as nn
+import jax
+import jax.numpy as jnp
 import numpy as np
-import torch
-import torch.distributions as dist
-from torch import nn
+import optax
+from jax import random
 
+from .mlp import MLP
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
-from .utils import soft_update_target
 
 
 class SAC(RLAlgo):
@@ -23,12 +26,13 @@ class SAC(RLAlgo):
     Soft Actor-Critic (SAC) algorithm for continuous control tasks.
 
     SAC is an off-policy actor-critic method based on the maximum entropy
-    reinforcement learning framework. It learns a stochastic policy that maximizes
-    both expected return and entropy to improve exploration and robustness.
+    reinforcement learning framework. It learns a stochastic policy that
+    maximizes both expected return and entropy to improve exploration and
+    robustness.
 
     Args:
-        action_dim: Dimensionality of the action space
         state_dim: Dimensionality of the state space
+        action_dim: Dimensionality of the action space
         hidden_dims: List of hidden layer sizes for neural networks
         replay_size: Maximum size of the replay buffer
         batch_size: Number of samples per training batch
@@ -38,31 +42,38 @@ class SAC(RLAlgo):
         tau: Target network soft update coefficient (0 < tau <= 1)
         gamma: Discount factor for future rewards (0 < gamma <= 1)
         alpha: If None, learn alpha, if float, use fixed alpha value
+        seed: Random seed for reproducibility
         state: Optional pre-trained network state dictionary
     """
 
     __slots__ = [
         "action_dim",
         "batch_size",
+        "buffer",
         "gamma",
+        "key",
         "learn_temperature",
         "log_alpha",
         "policy_network",
+        "policy_opt_state",
         "policy_optimizer",
+        "policy_params",
         "q_network",
+        "q_opt_state",
         "q_optimizer",
-        "q_target_network",
-        "replay_buffer",
+        "q_params",
+        "q_target_params",
         "state_dim",
         "target_entropy",
         "tau",
+        "temperature_opt_state",
         "temperature_optimizer",
     ]
 
     def __init__(
         self,
-        action_dim: int,
         state_dim: int,
+        action_dim: int,
         hidden_dims: list[int],
         replay_size: int,
         batch_size: int,
@@ -75,68 +86,94 @@ class SAC(RLAlgo):
         seed: int,
         state: dict | None = None,
     ) -> None:
+        self.key = random.PRNGKey(seed)
+
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.learn_temperature = alpha is None
-
-        self.q_network = self.QNetwork(state_dim, hidden_dims, action_dim, 2)
-
-        self.q_target_network = self.QNetwork(
-            state_dim, hidden_dims, action_dim, 2
-        )
-        self.q_target_network.load_state_dict(self.q_network.state_dict())
-
-        self.policy_network = self.PolicyNetwork(
-            state_dim, hidden_dims, action_dim
-        )
-
-        self.log_alpha = (
-            nn.Parameter(torch.zeros(1))
-            if self.learn_temperature
-            else torch.log(torch.tensor(alpha))
-        )
-
-        self.q_optimizer = torch.optim.Adam(
-            self.q_network.parameters(), lr=critic_lr
-        )
-        self.policy_optimizer = torch.optim.Adam(
-            self.policy_network.parameters(), lr=policy_lr
-        )
-
-        self.temperature_optimizer = (
-            torch.optim.Adam([self.log_alpha], lr=temperature_lr)
-            if self.learn_temperature
-            else None
-        )
-
-        self.replay_buffer = ReplayBuffer(replay_size)
         self.batch_size = batch_size
-
-        self.target_entropy = -action_dim
         self.tau = tau
         self.gamma = gamma
+        self.target_entropy = -float(action_dim)
+
+        self.q_network = self.QNetwork(hidden_dims=hidden_dims, num_critics=2)
+        self.policy_network = self.PolicyNetwork(
+            hidden_dims=hidden_dims, action_dim=action_dim
+        )
+
+        self.key, q_key, policy_key = random.split(self.key, 3)
+
+        dummy_state = jnp.zeros((1, state_dim))
+        dummy_action = jnp.zeros((1, action_dim))
+
+        self.q_params = self.q_network.init(q_key, dummy_state, dummy_action)
+        self.q_target_params = self.q_params
+        self.policy_params = self.policy_network.init(policy_key, dummy_state)
+
+        self.learn_temperature = alpha is None
+        if self.learn_temperature:
+            self.log_alpha = jnp.array(0, dtype=jnp.float32)
+        else:
+            self.log_alpha = jnp.log(jnp.array(alpha, dtype=jnp.float32))
+
+        self.q_optimizer = optax.adam(critic_lr)
+        self.policy_optimizer = optax.adam(policy_lr)
+
+        self.q_opt_state = self.q_optimizer.init(self.q_params)
+        self.policy_opt_state = self.policy_optimizer.init(self.policy_params)
+
+        if self.learn_temperature:
+            self.temperature_optimizer = optax.adam(temperature_lr)
+            self.temperature_opt_state = self.temperature_optimizer.init(
+                self.log_alpha
+            )
+
+        self.buffer = ReplayBuffer(replay_size, state_dim, action_dim)
 
         if state is not None:
             self.load_from_state(state)
 
     def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
         """
-        Selects an action in range [-1, 1] using deterministic mean
-        (evaluation=True) or stochastic sampling (evaluation=False).
+        Selects an action in range [-1, 1] for the given state using either
+        deterministic or stochastic sampling. Use this method to get actions
+        from your trained agent during environment interaction.
 
         Args:
             state: Current environment state observation
-            evaluation: Whether to use deterministic (True) or stochastic (False)
-             action selection
+            evaluation: Whether to use deterministic or stochastic
         """
-        state = torch.as_tensor(state, dtype=torch.float32).unsqueeze(0)
-        mean, log_std = self.policy_network(state)
+        jax_state = state[None, ...]
 
-        action = (
-            mean if evaluation else dist.Normal(mean, log_std.exp()).rsample()
-        )
+        if evaluation:
+            action = self._exploit(self.policy_params, jax_state)
+        else:
+            self.key, action_key = random.split(self.key)
+            action = self._explore(self.policy_params, jax_state, action_key)
 
-        return torch.tanh(action).squeeze(0).detach().numpy()
+        return np.array(action[0])
+
+    @partial(jax.jit, static_argnums=0)
+    def _exploit(
+        self,
+        policy_params: dict[str, any],
+        state: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Select deterministic action using policy mean."""
+        mean, _ = self.policy_network.apply(policy_params, state)
+        return jnp.tanh(mean)
+
+    @partial(jax.jit, static_argnums=0)
+    def _explore(
+        self,
+        policy_params: dict[str, any],
+        state: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Sample stochastic action from policy distribution."""
+        mean, log_std = self.policy_network.apply(policy_params, state)
+        noise = random.normal(key, mean.shape)
+        raw_action = mean + noise * jnp.exp(log_std)
+        return jnp.tanh(raw_action)
 
     def push_buffer(
         self,
@@ -146,207 +183,144 @@ class SAC(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.replay_buffer.push(state, action, reward, next_state, done)
+        """
+        Stores a transition tuple in the replay buffer for later training. Call
+        this method after each environment step to build your training dataset.
+
+        Args:
+            state: Current environment state observation
+            action: Action taken in the environment
+            reward: Reward received from the environment
+            next_state: Next state after taking the action
+            done: Whether the episode terminated
+        """
+        self.buffer.push(state, action, reward, next_state, done)
 
     def update(self) -> None:
         """
-        Performs one training step updating Q-networks, policy network, and
-        temperature using replay buffer samples.
+        Performs one training step updating all networks using sampled batch
+        from replay buffer. Call this method regularly during training to
+        improve the agent's performance.
         """
-        if len(self.replay_buffer) < self.batch_size:
+        if len(self.buffer) < self.batch_size:
             return
 
-        states, actions, rewards, next_states, dones = (
-            self.replay_buffer.sample(self.batch_size)
+        self.key, sample_key = random.split(self.key)
+        states, actions, rewards, next_states, dones = self.buffer.sample(
+            self.batch_size, sample_key
         )
 
-        q_loss = self._compute_q_loss(
-            states, actions, rewards, next_states, dones
+        (
+            self.q_params,
+            self.q_opt_state,
+        ) = self._update_critic(
+            self.q_params,
+            self.q_opt_state,
+            self.q_target_params,
+            self.policy_params,
+            self.log_alpha,
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
         )
-        self.q_optimizer.zero_grad()
-        q_loss.backward()
-        self.q_optimizer.step()
 
-        soft_update_target(self.q_target_network, self.q_network, self.tau)
-
-        policy_loss, temperature_loss = self._compute_policy_loss(states)
-
-        self.policy_optimizer.zero_grad()
-        policy_loss.backward()
-        self.policy_optimizer.step()
-
-        if self.learn_temperature:
-            self.temperature_optimizer.zero_grad()
-            temperature_loss.backward()
-            self.temperature_optimizer.step()
-
-    def get_state(self) -> dict:
-        """
-        Returns dictionary containing all agent state for saving or transferring.
-        """
-        state = {
-            "q": self.q_network.state_dict(),
-            "q_target": self.q_target_network.state_dict(),
-            "policy": self.policy_network.state_dict(),
-            "log_alpha": self.log_alpha.item(),
-            "q_optimizer": self.q_optimizer.state_dict(),
-            "policy_optimizer": self.policy_optimizer.state_dict(),
-            "replay_buffer": self.replay_buffer.get_data(),
-        }
+        self.key, policy_key = random.split(self.key)
+        (
+            self.policy_params,
+            self.policy_opt_state,
+            mean_log_probs,
+        ) = self._update_policy(
+            self.policy_params,
+            self.policy_opt_state,
+            self.q_params,
+            self.log_alpha,
+            states,
+            policy_key,
+        )
 
         if self.learn_temperature:
-            state["temperature_optimizer"] = (
-                self.temperature_optimizer.state_dict()
+            (
+                self.log_alpha,
+                self.temperature_opt_state,
+            ) = self._update_temperature(
+                self.log_alpha,
+                self.temperature_opt_state,
+                mean_log_probs,
             )
 
-        return state
+        self.q_target_params = self._soft_update(
+            self.q_target_params, self.q_params, self.tau
+        )
 
-    def load_from_state(self, state: dict) -> None:
-        """
-        Restores complete agent state from state dictionary.
-
-        Args:
-            state: Dictionary of agent state from get_state
-        """
-        self.q_network.load_state_dict(state["q"])
-        self.q_target_network.load_state_dict(state["q_target"])
-        self.policy_network.load_state_dict(state["policy"])
-        self.log_alpha.data = torch.tensor(state["log_alpha"])
-        self.q_optimizer.load_state_dict(state["q_optimizer"])
-        self.policy_optimizer.load_state_dict(state["policy_optimizer"])
-        self.replay_buffer.load_data(state["replay_buffer"])
-
-        if self.learn_temperature:
-            self.temperature_optimizer.load_state_dict(
-                state["temperature_optimizer"]
-            )
-
-    def _compute_q_loss(
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_critic(
         self,
-        states: torch.Tensor,
-        actions: torch.Tensor,
-        rewards: torch.Tensor,
-        next_states: torch.Tensor,
-        dones: torch.Tensor,
-    ) -> torch.Tensor:
-        # pi(s'), log pi (pi(s') | s')
-        next_actions, log_probs = self._compute_action_and_log_prob(next_states)
+        q_params: dict[str, jax.Array],
+        q_opt_state: optax.OptState,
+        q_target_params: dict[str, jax.Array],
+        policy_params: dict[str, jax.Array],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState]:
+        """Update Q-network parameters using computed gradients."""
 
-        # min(Q^target_theta_1 (s', a'), Q^target_theta_2 (s', a'))
-        q_targets_list = self.q_target_network(next_states, next_actions)
-        q_targets = torch.min(torch.stack(q_targets_list), dim=0)[0]
-
-        # r + gamma (1 - d) (min Q(s', a') - log pi (a' | s'))
-        alpha = self.log_alpha.exp()
-        targets = rewards + self.gamma * (1.0 - dones.float()) * (
-            q_targets - alpha * log_probs.detach()
+        _, q_grad = jax.value_and_grad(self._compute_q_loss)(
+            q_params,
+            q_target_params=q_target_params,
+            policy_params=policy_params,
+            log_alpha=log_alpha,
+            states=states,
+            actions=actions,
+            rewards=rewards,
+            next_states=next_states,
+            dones=dones,
         )
 
-        # EE [ 1/2 * (Q_theta_i (s, a) - y)^2 ]
-        q_values_list = self.q_network(states, actions)
-        q_losses = [
-            torch.mean(0.5 * (q_values - targets.detach()) ** 2)
-            for q_values in q_values_list
-        ]
-
-        return sum(q_losses)
-
-    def _compute_policy_loss(
-        self, states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # pi(s) log pi (pi(s) | s)
-        actions, log_probs = self._compute_action_and_log_prob(states)
-
-        # min(Q_theta_1 (s, a), Q_theta_2 (s, a))
-        q_values_list = self.q_network(states, actions)
-        q_values = torch.min(torch.stack(q_values_list), dim=0)[0]
-
-        # EE [ alpha log pi (a | s) - Q (s, a) ]
-        alpha = self.log_alpha.exp()
-        policy_loss = torch.mean(alpha * log_probs - q_values)
-
-        # EE [ -alpha (log pi (a | s) + H) ]
-        temperature_loss = torch.mean(
-            -self.log_alpha * (log_probs.detach() + self.target_entropy)
+        q_updates, new_q_opt_state = self.q_optimizer.update(
+            q_grad, q_opt_state
         )
+        new_q_params = optax.apply_updates(q_params, q_updates)
 
-        return policy_loss, temperature_loss
+        return new_q_params, new_q_opt_state
 
-    def _compute_action_and_log_prob(
-        self, state: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        #  N(mu_theta (s), sigma_theta (s)^2)
-        mean, log_std = self.policy_network(state)
-        gaussian = dist.Normal(mean, log_std.exp())
-
-        # a = tanh(u), u ~ N
-        raw_action = gaussian.rsample()
-        action = torch.tanh(raw_action)
-
-        # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
-        log_prob_gaussian = gaussian.log_prob(raw_action)
-        clamped_action = torch.clamp(action, min=-1.0 + 1e-6, max=1.0 - 1e-6)
-        tanh_correction = torch.log1p(-(clamped_action**2))
-        log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
-
-        return action, log_prob
-
+    @partial(jax.jit, static_argnums=(0,))
     class QNetwork(nn.Module):
-        __slots__ = ["networks"]
+        """
+        Q-function network with multiple critic heads for value estimation.
+        """
 
-        def __init__(
-            self,
-            state_dim: int,
-            hidden_dims: list[int],
-            action_dim: int,
-            n_critics: int,
-        ) -> None:
-            super().__init__()
-            self.networks = nn.ModuleList()
+        hidden_dims: list[int]
+        num_critics: int
 
-            for _ in range(n_critics):
-                layers = [
-                    nn.Linear(state_dim + action_dim, hidden_dims[0]),
-                    nn.ReLU(),
-                ]
-                for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                    layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-                layers.append(nn.Linear(hidden_dims[-1], 1))
-
-                self.networks.append(nn.Sequential(*layers))
-
-        def forward(
-            self, state: torch.Tensor, action: torch.Tensor
-        ) -> list[torch.Tensor]:
-            state_action = torch.cat([state, action], dim=1)
+        @nn.compact
+        def __call__(
+            self, states: jnp.ndarray, actions: jnp.ndarray
+        ) -> list[jnp.ndarray]:
+            states_actions = jnp.concatenate([states, actions], axis=1)
             return [
-                network(state_action).squeeze(-1) for network in self.networks
+                MLP(hidden_dims=self.hidden_dims, output_dim=1)(states_actions)
+                for _ in range(self.num_critics)
             ]
 
     class PolicyNetwork(nn.Module):
-        __slots__ = [
-            "action_dim",
-            "model",
-        ]
+        """
+        Policy network that outputs action mean and log standard deviation.
+        """
 
-        def __init__(
-            self, state_dim: int, hidden_dims: list[int], action_dim: int
-        ) -> None:
-            super().__init__()
-            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-            for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
+        hidden_dims: list[int]
+        action_dim: int
 
-            self.model = nn.Sequential(*layers)
-            self.action_dim = action_dim
-
-        def forward(
-            self, state: torch.Tensor
-        ) -> tuple[torch.Tensor, torch.Tensor]:
-            output = self.model(state)
-            mean, log_std = torch.split(output, self.action_dim, dim=-1)
-
-            log_std = torch.clamp(log_std, -20, 2)
-
+        @nn.compact
+        def __call__(
+            self, states: jnp.ndarray
+        ) -> tuple[jnp.ndarray, jnp.ndarray]:
+            output = MLP(self.hidden_dims, 2 * self.action_dim)(states)
+            mean, log_std = jnp.split(output, 2, axis=1)
+            log_std = jnp.clip(log_std, -10, 2)
             return mean, log_std

@@ -12,13 +12,23 @@ import numpy as np
 
 
 class RLAlgo(ABC):
+    """Abstract base class defining the interface for RL algorithms."""
+
     @abstractmethod
     def __init__(self) -> None:
         pass
 
     @abstractmethod
     def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
-        pass
+        """
+        Selects an action in range [-1, 1] for the given state using either
+        deterministic or stochastic sampling. Use this method to get actions
+        from your trained agent during environment interaction.
+
+        Args:
+            state: Current environment state observation
+            evaluation: Whether to use deterministic or stochastic
+        """
 
     @abstractmethod
     def push_buffer(
@@ -29,16 +39,41 @@ class RLAlgo(ABC):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        pass
+        """
+        Stores a transition tuple in the replay buffer for later training. Call
+        this method after each environment step to build your training dataset.
+
+        Args:
+            state: Current environment state observation
+            action: Action taken in the environment
+            reward: Reward received from the environment
+            next_state: Next state after taking the action
+            done: Whether the episode terminated
+        """
 
     @abstractmethod
     def update(self) -> None:
-        pass
+        """
+        Performs one training step updating all networks using sampled batch
+        from replay buffer. Call this method regularly during training to
+        improve the agent's performance.
+        """
 
     @abstractmethod
-    def get_state(self) -> dict:
-        pass
+    def get_state(self) -> dict[str, any]:
+        """
+        Returns a complete agent state dictionary including all network
+        parameters and optimizer states. Use this method to save your trained
+        agent for later use or checkpointing.
+        """
 
     @abstractmethod
-    def load_from_state(self, state: dict) -> None:
-        pass
+    def load_from_state(self, state: dict[str, any]) -> None:
+        """
+        Loads complete agent state from a previously saved state dictionary. Use
+        this method to restore a trained agent or continue training from a
+        checkpoint.
+
+        Args:
+            state: Dictionary containing saved agent parameters and states
+        """

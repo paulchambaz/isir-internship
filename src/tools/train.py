@@ -164,6 +164,8 @@ def test(agent: algos.RLAlgo, env: gym.Env, n: int) -> list:
 
 
 def main() -> None:
+    seed = 42
+
     envs = {
         "mountaincar": "MountainCarContinuous-v0",
         "pendulum": "Pendulum-v1",
@@ -204,6 +206,15 @@ def main() -> None:
     env_name = envs[args.env]
     train_env = gym.make(env_name)
     test_env = gym.make(env_name)
+
+    train_env.reset(seed=seed)
+    test_env.reset(seed=seed + 1)
+
+    train_env.action_space.seed(seed)
+    train_env.observation_space.seed(seed)
+
+    test_env.action_space.seed(seed + 1)
+    test_env.observation_space.seed(seed + 1)
 
     action_dim = train_env.action_space.shape[0]
     state_dim = train_env.observation_space.shape[0]

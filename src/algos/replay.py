@@ -7,37 +7,35 @@
 # (at your option) any later version.
 
 
+import jax
+import jax.numpy as jnp
 import numpy as np
-import torch
 
 
 class ReplayBuffer:
-    __slots__ = (
-        "action",
-        "buffer_size",
-        "done",
-        "n",
-        "next_state",
-        "p",
-        "reward",
-        "state",
-    )
-
     def __init__(
-        self,
-        buffer_size: int,
-        state_dim: int,
-        action_dim: int,
+        self, buffer_size: int, state_dim: int, action_dim: int
     ) -> None:
-        self.buffer_size = buffer_size
+        """
+        Circular buffer for storing and sampling experience transitions in RL
+        training. Use this to accumulate experience data and sample random
+        batches for learning.
+
+        Args:
+            buffer_size: Maximum number of transitions to store
+            state_dim: Dimensionality of state observations
+            action_dim: Dimensionality of action vectors
+        """
+
         self.n = 0
         self.p = 0
+        self.buffer_size = buffer_size
 
         self.state = np.empty((buffer_size, state_dim), dtype=np.float32)
         self.action = np.empty((buffer_size, action_dim), dtype=np.float32)
         self.reward = np.empty((buffer_size, 1), dtype=np.float32)
-        self.next_state = np.empty((buffer_size, state_dim), dtype=np.float32)
         self.done = np.empty((buffer_size, 1), dtype=np.float32)
+        self.next_state = np.empty((buffer_size, state_dim), dtype=np.float32)
 
     def push(
         self,
@@ -47,6 +45,12 @@ class ReplayBuffer:
         next_state: np.ndarray,
         done: bool,
     ) -> None:
+        """
+        Stores a single transition in the buffer, overwriting old data when
+        full. Call this method after each environment step to accumulate
+        training data.
+        """
+
         self.state[self.p] = state
         self.action[self.p] = action
         self.reward[self.p] = float(reward)
@@ -57,50 +61,51 @@ class ReplayBuffer:
         self.n = min(self.n + 1, self.buffer_size)
 
     def sample(
-        self, batch_size: int
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor
-    ]:
-        rng = np.random.default_rng()
-        idxes = rng.integers(0, self.n, size=batch_size)
+        self, batch_size: int, key: jnp.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Returns a random batch of transitions for training as a tuple in the
+        order: (states, actions, rewards, next_states, dones). Use this method
+        to get training batches during learning updates.
 
-        states = torch.from_numpy(self.state[idxes])
-        actions = torch.from_numpy(self.action[idxes])
-        rewards = torch.from_numpy(self.reward[idxes])
-        next_states = torch.from_numpy(self.next_state[idxes])
-        dones = torch.from_numpy(self.done[idxes])
+        Args:
+            batch_size: Number of transitions to sample
+            key: JAX random key for sampling
+        """
 
-        return states, actions, rewards, next_states, dones
-
-    def get_data(
-        self,
-    ) -> list[tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]]:
-        data = []
-        for i in range(self.n):
-            data.append(
-                (
-                    self.state[i].copy(),
-                    self.action[i].copy(),
-                    float(self.reward[i]),
-                    self.next_state[i].copy(),
-                    bool(self.done[i]),
-                )
-            )
-        return data
-
-    def load_data(
-        self, data: list[tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]]
-    ) -> None:
-        n = min(len(data), self.buffer_size)
-        for i in range(n):
-            state, action, reward, next_state, done = data[i]
-            self.state[i] = state
-            self.action[i] = action
-            self.reward[i] = reward
-            self.next_state[i] = next_state
-            self.done[i] = float(done)
-        self.n = n
-        self.p = n % self.buffer_size
+        idxes = jax.random.randint(
+            key, shape=(batch_size,), minval=0, maxval=self.n
+        )
+        return (
+            self.state[idxes],
+            self.action[idxes],
+            self.reward[idxes],
+            self.next_state[idxes],
+            self.done[idxes],
+        )
 
     def __len__(self) -> int:
+        """Returns the current number of stored transitions."""
         return self.n
+
+    def get_data(self) -> dict[str, any]:
+        """Returns buffer data dictionary for saving."""
+        return {
+            "state": self.state[: self.n].copy(),
+            "action": self.action[: self.n].copy(),
+            "reward": self.reward[: self.n].copy(),
+            "next_state": self.next_state[: self.n].copy(),
+            "done": self.done[: self.n].copy(),
+            "n": self.n,
+            "p": self.p,
+        }
+
+    def load_data(self, data: dict[str, any]) -> None:
+        """Loads buffer data from a saved state dictionary."""
+        self.n = data["n"]
+        self.p = data["p"]
+        self.state[: self.n] = data["state"]
+        self.action[: self.n] = data["action"]
+        self.reward[: self.n] = data["reward"]
+        self.next_state[: self.n] = data["next_state"]
+        self.done[: self.n] = data["done"]
