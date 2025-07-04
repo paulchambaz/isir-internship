@@ -72,6 +72,7 @@ class SAC(RLAlgo):
         tau: float,
         gamma: float,
         alpha: float | None,
+        seed: int,
         state: dict | None = None,
     ) -> None:
         self.state_dim = state_dim

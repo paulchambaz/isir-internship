@@ -56,6 +56,7 @@ class TQC(RLAlgo):
         n_quantiles: int,
         n_critics: int,
         quantiles_drop: int,
+        seed: int,
         state: dict | None = None,
     ) -> None:
         self.state_dim = state_dim

@@ -230,6 +230,7 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
+                seed=seed,
             )
         case "afu":
             agent = algos.AFU(
@@ -262,8 +263,6 @@ def main() -> None:
                 alpha=alpha,
                 rho=0.7,
                 seed=seed,
-                state_space=train_env.observation_space,
-                action_space=train_env.action_space,
             )
         case "tqc":
             agent = algos.TQC(
@@ -281,6 +280,7 @@ def main() -> None:
                 n_quantiles=25,
                 n_critics=3,
                 quantiles_drop=2,
+                seed=seed,
             )
         case _:
             return
