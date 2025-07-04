@@ -152,7 +152,7 @@ class SAC(RLAlgo):
 
         return np.array(action[0])
 
-    @partial(jax.jit, static_argnums=0)
+    @partial(jax.jit, static_argnums=(0,))
     def _exploit(
         self,
         policy_params: dict[str, any],
@@ -162,7 +162,7 @@ class SAC(RLAlgo):
         mean, _ = self.policy_network.apply(policy_params, state)
         return jnp.tanh(mean)
 
-    @partial(jax.jit, static_argnums=0)
+    @partial(jax.jit, static_argnums=(0,))
     def _explore(
         self,
         policy_params: dict[str, any],
@@ -210,6 +210,8 @@ class SAC(RLAlgo):
             self.batch_size, sample_key
         )
 
+        self.key, critic_key = random.split(self.key)
+
         (
             self.q_params,
             self.q_opt_state,
@@ -224,6 +226,7 @@ class SAC(RLAlgo):
             rewards,
             next_states,
             dones,
+            critic_key,
         )
 
         self.key, policy_key = random.split(self.key)
@@ -267,10 +270,11 @@ class SAC(RLAlgo):
         rewards: jnp.ndarray,
         next_states: jnp.ndarray,
         dones: jnp.ndarray,
+        key: jnp.ndarray,
     ) -> tuple[dict[str, jax.Array], optax.OptState]:
         """Update Q-network parameters using computed gradients."""
 
-        _, q_grad = jax.value_and_grad(self._compute_q_loss)(
+        q_grad = jax.grad(self._compute_q_loss)(
             q_params,
             q_target_params=q_target_params,
             policy_params=policy_params,
@@ -280,6 +284,7 @@ class SAC(RLAlgo):
             rewards=rewards,
             next_states=next_states,
             dones=dones,
+            key=key,
         )
 
         q_updates, new_q_opt_state = self.q_optimizer.update(
@@ -290,6 +295,216 @@ class SAC(RLAlgo):
         return new_q_params, new_q_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
+    def _compute_q_loss(
+        self,
+        q_params: dict[str, any],
+        q_target_params: dict[str, any],
+        policy_params: dict[str, any],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """
+        Compute Q-network loss using Bellman equation with entropy
+        regularization.
+        """
+
+        next_actions, next_log_probs = self._compute_action_and_log_prob(
+            policy_params, next_states, key
+        )
+
+        q_next_targets_list = jnp.asarray(
+            self.q_network.apply(q_target_params, next_states, next_actions)
+        )
+        q_next_targets = jnp.min(q_next_targets_list, axis=0)
+
+        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
+        q_targets = jax.lax.stop_gradient(
+            rewards
+            + self.gamma
+            * (1.0 - dones)
+            * (q_next_targets - alpha * next_log_probs)
+        )
+
+        q_values_list = jnp.asarray(
+            self.q_network.apply(q_params, states, actions)
+        )
+
+        return jnp.mean(0.5 * (q_values_list - q_targets) ** 2)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_policy(
+        self,
+        policy_params: dict[str, jax.Array],
+        policy_opt_state: optax.OptState,
+        q_params: dict[str, jax.Array],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState, jax.Array]:
+        """Update policy network parameters using computed gradients."""
+
+        policy_grad, mean_log_probs = jax.grad(
+            self._compute_policy_loss, has_aux=True
+        )(
+            policy_params,
+            q_params=q_params,
+            log_alpha=log_alpha,
+            states=states,
+            key=key,
+        )
+
+        policy_updates, new_policy_opt_state = self.policy_optimizer.update(
+            policy_grad, policy_opt_state
+        )
+        new_policy_params = optax.apply_updates(policy_params, policy_updates)
+
+        return new_policy_params, new_policy_opt_state, mean_log_probs
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_policy_loss(
+        self,
+        policy_params: dict[str, any],
+        q_params: dict[str, any],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Compute policy loss with entropy regularization."""
+
+        actions, log_probs = self._compute_action_and_log_prob(
+            policy_params, states, key
+        )
+
+        q_values_list = jnp.asarray(
+            self.q_network.apply(q_params, states, actions)
+        )
+        q_values = jnp.min(q_values_list, axis=0)
+
+        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
+
+        mean_log_probs = log_probs.mean()
+        mean_q_values = q_values.mean()
+
+        policy_loss = alpha * mean_log_probs - mean_q_values
+
+        return policy_loss, jax.lax.stop_gradient(mean_log_probs)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_temperature(
+        self,
+        log_alpha: jax.Array,
+        temperature_opt_state: optax.OptState,
+        mean_log_probs: jax.Array,
+    ) -> tuple[jax.Array, optax.OptState]:
+        """Update temperature parameter for entropy regularization."""
+
+        temperature_grad = jax.grad(self._compute_temperature_loss)(
+            log_alpha, mean_log_probs
+        )
+
+        temperature_updates, new_temperature_opt_state = (
+            self.temperature_optimizer.update(
+                temperature_grad, temperature_opt_state
+            )
+        )
+        new_log_alpha = optax.apply_updates(log_alpha, temperature_updates)
+
+        return new_log_alpha, new_temperature_opt_state
+
+    @partial(jax.jit, static_argnums=0)
+    def _compute_temperature_loss(
+        self,
+        log_alpha: jnp.ndarray,
+        mean_log_probs: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute temperature loss for automatic entropy tuning."""
+
+        return -log_alpha * (self.target_entropy + mean_log_probs)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_action_and_log_prob(
+        self,
+        policy_params: dict[str, any],
+        states: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        means, log_std = self.policy_network.apply(policy_params, states)
+
+        noise = jax.random.normal(key, means.shape)
+        raw_actions = means + noise * jnp.exp(log_std)
+        actions = jnp.tanh(raw_actions)
+
+        gaussian_log_probs = -0.5 * (
+            jnp.square(noise) + 2 * log_std + jnp.log(2 * math.pi)
+        )
+
+        tanh_corrections = jnp.log(nn.relu(1.0 - jnp.square(actions)) + 1e-6)
+        log_probs = (gaussian_log_probs - tanh_corrections).sum(
+            axis=1, keepdims=True
+        )
+
+        return actions, log_probs
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _soft_update(
+        self,
+        target_params: dict[str, any],
+        online_params: dict[str, any],
+        tau: float,
+    ) -> dict[str, any]:
+        """Perform soft update of target network parameters."""
+        return jax.tree.map(
+            lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
+        )
+
+    def get_state(self) -> dict[str, any]:
+        """
+        Returns a complete agent state dictionary including all network
+        parameters and optimizer states. Use this method to save your trained
+        agent for later use or checkpointing.
+        """
+        state = {
+            "q_params": self.q_params,
+            "q_target_params": self.q_target_params,
+            "policy_params": self.policy_params,
+            "log_alpha": self.log_alpha,
+            "q_opt_state": self.q_opt_state,
+            "policy_opt_state": self.policy_opt_state,
+            "key": self.key,
+            "replay_buffer": self.buffer.get_data(),
+        }
+
+        if self.learn_temperature:
+            state["temperature_opt_state"] = self.temperature_opt_state
+
+        return state
+
+    def load_from_state(self, state: dict[str, any]) -> None:
+        """
+        Loads complete agent state from a previously saved state dictionary. Use
+        this method to restore a trained agent or continue training from a
+        checkpoint.
+
+        Args:
+            state: Dictionary containing saved agent parameters and states
+        """
+        self.q_params = state["q_params"]
+        self.q_target_params = state["q_target_params"]
+        self.policy_params = state["policy_params"]
+        self.log_alpha = state["log_alpha"]
+        self.q_opt_state = state["q_opt_state"]
+        self.policy_opt_state = state["policy_opt_state"]
+        self.key = state["key"]
+        self.buffer.load_data(state["replay_buffer"])
+
+        if self.learn_temperature and "temperature_opt_state" in state:
+            self.temperature_opt_state = state["temperature_opt_state"]
+
     class QNetwork(nn.Module):
         """
         Q-function network with multiple critic heads for value estimation.

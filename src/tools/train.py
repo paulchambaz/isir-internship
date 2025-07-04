@@ -230,8 +230,8 @@ def main() -> None:
     match args.algo:
         case "sac":
             agent = algos.SAC(
-                action_dim=action_dim,
                 state_dim=state_dim,
+                action_dim=action_dim,
                 hidden_dims=hidden_dims,
                 replay_size=replay_size,
                 batch_size=batch_size,
@@ -245,8 +245,8 @@ def main() -> None:
             )
         case "afu":
             agent = algos.AFU(
-                action_dim=action_dim,
                 state_dim=state_dim,
+                action_dim=action_dim,
                 hidden_dims=hidden_dims,
                 replay_size=replay_size,
                 batch_size=batch_size,
@@ -277,8 +277,8 @@ def main() -> None:
             )
         case "tqc":
             agent = algos.TQC(
-                action_dim=action_dim,
                 state_dim=state_dim,
+                action_dim=action_dim,
                 hidden_dims=hidden_dims,
                 replay_size=replay_size,
                 batch_size=batch_size,

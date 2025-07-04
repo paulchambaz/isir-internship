@@ -248,7 +248,7 @@ class AFU(RLAlgo):
             self.policy_params,
             self.policy_opt_state,
             mean_log_probs,
-        ) = self._update_actor_policy(
+        ) = self._update_policy(
             self.policy_params,
             self.policy_opt_state,
             self.q_params,
@@ -347,7 +347,7 @@ class AFU(RLAlgo):
         q_values = jnp.asarray(q_values_list[-1:])
 
         abs_td = jnp.abs(q_targets - q_values)
-        q_loss = (abs_td**2).mean()
+        q_loss = (jnp.square(abs_td)).mean()
 
         a_values = -jnp.asarray(q_values_list[:-1])
 
@@ -368,7 +368,7 @@ class AFU(RLAlgo):
         return va_loss + q_loss
 
     @partial(jax.jit, static_argnums=(0,))
-    def _update_actor_policy(
+    def _update_policy(
         self,
         policy_params: dict[str, jax.Array],
         policy_opt_state: optax.OptState,
@@ -412,12 +412,12 @@ class AFU(RLAlgo):
 
         means, log_std = self.policy_network.apply(policy_params, states)
 
-        noise = jax.random.normal(key, means.shape)
-        raw_action = means + noise * jnp.exp(log_std)
-        actions = jnp.tanh(raw_action)
+        noises = jax.random.normal(key, means.shape)
+        raw_actions = means + noises * jnp.exp(log_std)
+        actions = jnp.tanh(raw_actions)
 
         gaussian_log_probs = -0.5 * (
-            jnp.square(noise) + 2 * log_std + jnp.log(2 * math.pi)
+            jnp.square(noises) + 2 * log_std + jnp.log(2 * math.pi)
         )
         tanh_corrections = jnp.log(nn.relu(1.0 - jnp.square(actions)) + 1e-6)
 
