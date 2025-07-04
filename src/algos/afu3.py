@@ -338,9 +338,9 @@ class AFU(RLAlgo):
         _, (q_grad, v_grad) = jax.value_and_grad(
             self._compute_critic_loss, argnums=(0, 1), has_aux=False
         )(
-            self.q_params,
-            self.v_params,
-            v_target_params=self.v_target_params,
+            q_params,
+            v_params,
+            v_target_params=v_target_params,
             states=states,
             actions=actions,
             rewards=rewards,
