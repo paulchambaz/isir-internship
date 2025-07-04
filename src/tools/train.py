@@ -240,7 +240,7 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 rho=0.7,
-                seed=seed,
+                # seed=seed,
             )
         case "afup":
             agent = algos.AFUP(
