@@ -32,6 +32,11 @@ def train(
     test_freq: int,
     count: int,
 ) -> tuple[algos.RLAlgo, dict]:
+    if train_env.spec.id == "MountainCarContinuous-v0":
+        expert_transitions = expert_mountaincar(train_env, count=10)
+        for state, action, reward, next_state, done in expert_transitions:
+            agent.push_buffer(state, action, reward, next_state, done)
+
     history = {}
     agent_history = {}
 
@@ -279,11 +284,6 @@ def main() -> None:
             )
         case _:
             return
-
-    if args.env == "mountaincar":
-        expert_transitions = expert_mountaincar(train_env, count=10)
-        for state, action, reward, next_state, done in expert_transitions:
-            agent.push_buffer(state, action, reward, next_state, done)
 
     Path("outputs").mkdir(exist_ok=True)
 

@@ -58,6 +58,8 @@ class AFUP(RLAlgo):
             gradient_reduction=1 - rho,
             gamma=gamma,
             seed=42,
+            variant="alpha",
+            alg="AFU",
             num_agent_steps=100_000,
         )
 
