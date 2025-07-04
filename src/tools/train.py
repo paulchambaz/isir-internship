@@ -292,7 +292,7 @@ def main() -> None:
         train_env=train_env,
         test_env=test_env,
         steps=args.steps,
-        warmup=1000,
+        warmup=10000,
         train_freq=32,
         gradient_steps=32,
         test_freq=50,
