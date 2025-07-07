@@ -11,6 +11,7 @@ import itertools
 import numpy as np
 import torch
 import torch.distributions as dist
+from jax.random import PRNGKey
 from torch import nn
 
 from .replay import ReplayBuffer
@@ -22,6 +23,7 @@ class TQC(RLAlgo):
     __slots__ = [
         "action_dim",
         "batch_size",
+        "buffer",
         "gamma",
         "learn_temperature",
         "log_alpha",
@@ -30,7 +32,7 @@ class TQC(RLAlgo):
         "policy_network",
         "policy_optimizer",
         "quantiles_drop",
-        "replay_buffer",
+        "rng",
         "state_dim",
         "target_entropy",
         "tau",
@@ -59,6 +61,9 @@ class TQC(RLAlgo):
         seed: int,
         state: dict | None = None,
     ) -> None:
+        self.rng = torch.Generator()
+        self.rng.manual_seed(seed)
+
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.n_quantiles = n_quantiles
@@ -96,7 +101,7 @@ class TQC(RLAlgo):
             else None
         )
 
-        self.replay_buffer = ReplayBuffer(replay_size)
+        self.buffer = ReplayBuffer(replay_size)
         self.batch_size = batch_size
 
         self.target_entropy = -action_dim
@@ -135,18 +140,19 @@ class TQC(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.replay_buffer.push(state, action, reward, next_state, done)
+        self.buffer.push(state, action, reward, next_state, done)
 
     def update(self) -> None:
         """
         Performs one training step updating Q-networks, policy network, and
         temperature using replay buffer samples.
         """
-        if len(self.replay_buffer) < self.batch_size:
+        if len(self.buffer) < self.batch_size:
             return
 
-        states, actions, rewards, next_states, dones = (
-            self.replay_buffer.sample(self.batch_size)
+        new_seed = torch.randint(0, 2**31 - 1, (1,), generator=self.rng).item()
+        states, actions, rewards, next_states, dones = self.buffer.sample(
+            self.batch_size, PRNGKey(new_seed)
         )
 
         z_loss = self._compute_z_loss(
@@ -180,7 +186,7 @@ class TQC(RLAlgo):
             "log_alpha": self.log_alpha.item(),
             "z_optimizer": self.z_optimizer.state_dict(),
             "policy_optimizer": self.policy_optimizer.state_dict(),
-            "replay_buffer": self.replay_buffer.get_data(),
+            "replay_buffer": self.buffer.get_data(),
         }
 
         if self.learn_temperature:
@@ -203,7 +209,7 @@ class TQC(RLAlgo):
         self.log_alpha.data = torch.tensor(state["log_alpha"])
         self.z_optimizer.load_state_dict(state["z_optimizer"])
         self.policy_optimizer.load_state_dict(state["policy_optimizer"])
-        self.replay_buffer.load_data(state["replay_buffer"])
+        self.buffer.load_data(state["replay_buffer"])
 
         if self.learn_temperature:
             self.temperature_optimizer.load_state_dict(
