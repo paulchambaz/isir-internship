@@ -155,6 +155,12 @@ class TQC(RLAlgo):
             self.batch_size, PRNGKey(new_seed)
         )
 
+        states = torch.from_numpy(states)
+        actions = torch.from_numpy(actions)
+        rewards = torch.from_numpy(rewards)
+        next_states = torch.from_numpy(next_states)
+        dones = torch.from_numpy(dones)
+
         z_loss = self._compute_z_loss(
             states, actions, rewards, next_states, dones
         )
