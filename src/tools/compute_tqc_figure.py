@@ -131,7 +131,7 @@ def train_avg_method(
         best_q_value = jnp.max(grid_q_values_avg)
 
         targets = jnp.broadcast_to(
-            rewards + gamma * best_q_value, (n, len(rewards))
+            rewards + gamma * best_q_value, (n, len(rewards), 1)
         )
 
         grads = jax.grad(compute_loss)(params, actions, targets)
@@ -149,7 +149,7 @@ def train_avg_method(
         return jnp.mean(losses)
 
     for _ in range(iterations):
-        params, opt_states = update(params, opt_state, actions, rewards)
+        params, opt_state = update(params, opt_state, actions, rewards)
 
     @jax.jit
     def ensemble_evaluator(eval_actions: jnp.ndarray) -> jnp.ndarray:
@@ -187,7 +187,7 @@ def train_min_method(
         best_q_value = jnp.max(grid_q_values_min)
 
         targets = jnp.broadcast_to(
-            rewards + gamma * best_q_value, (n, len(rewards))
+            rewards + gamma * best_q_value, (n, len(rewards), 1)
         )
 
         grads = jax.grad(compute_loss)(params, actions, targets)
@@ -205,7 +205,7 @@ def train_min_method(
         return jnp.mean(losses)
 
     for _ in range(iterations):
-        params, opt_states = update(params, opt_state, actions, rewards)
+        params, opt_state = update(params, opt_state, actions, rewards)
 
     @jax.jit
     def ensemble_evaluator(eval_actions: jnp.ndarray) -> jnp.ndarray:
