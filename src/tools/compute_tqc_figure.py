@@ -131,7 +131,8 @@ def train_avg_method(
         best_q_value = jnp.max(grid_q_values_avg)
 
         targets = jnp.broadcast_to(
-            rewards + gamma * best_q_value, (n, len(rewards), 1)
+            (rewards + gamma * best_q_value)[None, :, None],
+            (n, len(rewards), 1),
         )
 
         grads = jax.grad(compute_loss)(params, actions, targets)
@@ -187,7 +188,8 @@ def train_min_method(
         best_q_value = jnp.max(grid_q_values_min)
 
         targets = jnp.broadcast_to(
-            rewards + gamma * best_q_value, (n, len(rewards), 1)
+            (rewards + gamma * best_q_value)[None, :, None],
+            (n, len(rewards), 1),
         )
 
         grads = jax.grad(compute_loss)(params, actions, targets)
