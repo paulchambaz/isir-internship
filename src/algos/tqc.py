@@ -291,11 +291,14 @@ class TQC(RLAlgo):
         current_expanded = z_values.unsqueeze(-1)
         target_expanded = z_targets.unsqueeze(1).unsqueeze(1)
 
-        tau = torch.linspace(
+        tau_per_quantile = torch.linspace(
             1 / (2 * self.n_quantiles),
             1 - 1 / (2 * self.n_quantiles),
             self.n_quantiles,
-        ).view(1, 1, -1, 1)
+        )
+
+        tau = tau_per_quantile.repeat(self.n_critics, 1)
+        tau = tau.view(1, self.n_critics, self.n_quantiles, 1)
 
         diff = target_expanded - current_expanded
         abs_diff = torch.abs(diff)
@@ -303,7 +306,7 @@ class TQC(RLAlgo):
         huber = torch.where(abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5)
 
         indicator = (diff < 0).float()
-        weights = torch.abs(tau - indicator)
+        weights = torch.abs(tau_per_quantile - indicator)
 
         weighted_loss = weights * huber
         return weighted_loss.mean()
