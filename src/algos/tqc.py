@@ -225,8 +225,8 @@ class TQC(RLAlgo):
             nz_targets = self.z_target_network(next_states, next_actions)
             all_nz_targets = nz_targets.view(nz_targets.shape[0], -1)
             sorted_nz_targets, _ = torch.sort(all_nz_targets, dim=1)
-            n_quantiles = self.n_quantiles * (
-                self.n_critics - self.quantiles_drop
+            n_quantiles = self.n_critics * (
+                self.n_quantiles - self.quantiles_drop
             )
             truncated_nz_targets = sorted_nz_targets[:, :n_quantiles]
 

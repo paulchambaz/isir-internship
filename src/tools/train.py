@@ -314,8 +314,6 @@ def main() -> None:
         pickle.dump(trained_agent.get_state(), f)
     with open("outputs/history.pk", "wb") as f:
         pickle.dump(history, f)
-    # with open("outputs/agent_history.pk", "wb") as f:
-    #     pickle.dump(agent_history, f)
 
     train_env.close()
     test_env.close()
