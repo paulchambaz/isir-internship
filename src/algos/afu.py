@@ -324,9 +324,7 @@ class AFU(RLAlgo):
     ) -> jnp.ndarray:
         """Compute combined loss for Q and V networks with V-A constraints."""
 
-        v_targets_list = jax.lax.stop_gradient(
-            self.v_network.apply(v_target_params, next_states)
-        )
+        v_targets_list = self.v_network.apply(v_target_params, next_states)
         v_targets = jnp.min(v_targets_list, axis=0)
 
         q_targets = jax.lax.stop_gradient(
