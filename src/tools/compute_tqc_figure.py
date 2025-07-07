@@ -21,8 +21,6 @@ from tqdm import tqdm
 
 from algos import MLP
 
-GRID_ACTIONS = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
-
 
 class ToyMdp:
     __slots__ = [
@@ -105,46 +103,6 @@ class ZNetwork(nn.Module):
         )
 
 
-@jax.jit
-def avg_update(
-    params: dict[str, jax.Array],
-    opt_state: optax.OptState,
-    actions: jnp.ndarray,
-    rewards: jnp.ndarray,
-    net: QNetwork,
-    optimizer: optax.GradientTransformation,
-    gamma: float,
-    n: int,
-) -> tuple[dict[str, jax.Array], optax.OptState]:
-    grid_q_values = net.apply(params, GRID_ACTIONS)
-    grid_q_values_avg = jnp.mean(grid_q_values, axis=0)
-    best_q_value = jnp.max(grid_q_values_avg)
-
-    targets = jnp.broadcast_to(
-        (rewards + gamma * best_q_value)[None, :, None],
-        (n, len(rewards), 1),
-    )
-
-    def compute_loss(params: dict[str, jax.Array]) -> jax.Array:
-        values = net.apply(params, actions)
-        losses = jnp.mean((values - targets) ** 2, axis=1)
-        return jnp.mean(losses)
-
-    grads = jax.grad(compute_loss)(params, actions, targets)
-    updates, new_opt_states = optimizer.update(grads, opt_state)
-    new_params = optax.apply_updates(params, updates)
-
-    return new_params, new_opt_states
-
-
-@jax.jit
-def evaluate_avg_ensemble(
-    params: dict[str, jax.Array], net: QNetwork, eval_actions: jnp.ndarray
-) -> jnp.ndarray:
-    critic_outputs = net.apply(params, eval_actions)
-    return jnp.mean(critic_outputs, axis=0)
-
-
 def train_avg_method(
     dataset: tuple[jnp.ndarray, jnp.ndarray],
     n: int,
@@ -159,51 +117,47 @@ def train_avg_method(
     optimizer = optax.adam(1e-3)
     opt_state = optimizer.init(params)
 
-    for _ in range(iterations):
-        params, opt_state = avg_update(
-            params, opt_state, actions, rewards, net, optimizer, gamma, n
+    grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
+
+    @jax.jit
+    def update(
+        params: dict[str, jax.Array],
+        opt_state: optax.OptState,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState]:
+        grid_q_values = net.apply(params, grid_actions)
+        grid_q_values_avg = jnp.mean(grid_q_values, axis=0)
+        best_q_value = jnp.max(grid_q_values_avg)
+
+        targets = jnp.broadcast_to(
+            (rewards + gamma * best_q_value)[None, :, None],
+            (n, len(rewards), 1),
         )
 
-    return lambda eval_actions: evaluate_avg_ensemble(params, net, eval_actions)
+        grads = jax.grad(compute_loss)(params, actions, targets)
+        updates, new_opt_states = optimizer.update(grads, opt_state)
+        new_params = optax.apply_updates(params, updates)
 
+        return new_params, new_opt_states
 
-@jax.jit
-def min_update(
-    params: dict[str, jax.Array],
-    opt_state: optax.OptState,
-    actions: jnp.ndarray,
-    rewards: jnp.ndarray,
-    net: QNetwork,
-    optimizer: optax.GradientTransformation,
-    gamma: float,
-    n: int,
-) -> tuple[dict[str, jax.Array], optax.OptState]:
-    grid_q_values = net.apply(params, GRID_ACTIONS)
-    grid_q_values_min = jnp.min(grid_q_values, axis=0)
-    best_q_value = jnp.max(grid_q_values_min)
-
-    targets = jnp.broadcast_to(
-        (rewards + gamma * best_q_value)[None, :, None],
-        (n, len(rewards), 1),
-    )
-
-    def compute_loss(params: dict[str, jax.Array]) -> jax.Array:
+    @jax.jit
+    def compute_loss(
+        params: dict[str, jax.Array], actions: jnp.ndarray, targets: jnp.ndarray
+    ) -> jax.Array:
         values = net.apply(params, actions)
         losses = jnp.mean((values - targets) ** 2, axis=1)
         return jnp.mean(losses)
 
-    grads = jax.grad(compute_loss)(params)
-    updates, new_opt_state = optimizer.update(grads, opt_state)
-    new_params = optax.apply_updates(params, updates)
-    return new_params, new_opt_state
+    for _ in range(iterations):
+        params, opt_state = update(params, opt_state, actions, rewards)
 
+    @jax.jit
+    def ensemble_evaluator(eval_actions: jnp.ndarray) -> jnp.ndarray:
+        critic_outputs = net.apply(params, eval_actions)
+        return jnp.mean(critic_outputs, axis=0)
 
-@jax.jit
-def evaluate_min_ensemble(
-    params: dict[str, jax.Array], net: QNetwork, eval_actions: jnp.ndarray
-) -> jnp.ndarray:
-    critic_outputs = net.apply(params, eval_actions)
-    return jnp.min(critic_outputs, axis=0)
+    return ensemble_evaluator
 
 
 def train_min_method(
@@ -220,82 +174,47 @@ def train_min_method(
     optimizer = optax.adam(1e-3)
     opt_state = optimizer.init(params)
 
+    grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
+
+    @jax.jit
+    def update(
+        params: dict[str, jax.Array],
+        opt_state: optax.OptState,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState]:
+        grid_q_values = net.apply(params, grid_actions)
+        grid_q_values_min = jnp.min(grid_q_values, axis=0)
+        best_q_value = jnp.max(grid_q_values_min)
+
+        targets = jnp.broadcast_to(
+            (rewards + gamma * best_q_value)[None, :, None],
+            (n, len(rewards), 1),
+        )
+
+        grads = jax.grad(compute_loss)(params, actions, targets)
+        updates, new_opt_states = optimizer.update(grads, opt_state)
+        new_params = optax.apply_updates(params, updates)
+
+        return new_params, new_opt_states
+
+    @jax.jit
+    def compute_loss(
+        params: dict[str, jax.Array], actions: jnp.ndarray, targets: jnp.ndarray
+    ) -> jax.Array:
+        values = net.apply(params, actions)
+        losses = jnp.mean((values - targets) ** 2, axis=1)
+        return jnp.mean(losses)
+
     for _ in range(iterations):
-        params, opt_state = min_update(
-            params, opt_state, actions, rewards, net, optimizer, gamma, n
-        )
+        params, opt_state = update(params, opt_state, actions, rewards)
 
-    return lambda eval_actions: evaluate_min_ensemble(params, net, eval_actions)
+    @jax.jit
+    def ensemble_evaluator(eval_actions: jnp.ndarray) -> jnp.ndarray:
+        critic_outputs = net.apply(params, eval_actions)
+        return jnp.min(critic_outputs, axis=0)
 
-
-@jax.jit
-def tqc_update(
-    params: dict[str, jax.Array],
-    opt_state: optax.OptState,
-    actions: jnp.ndarray,
-    rewards: jnp.ndarray,
-    net: ZNetwork,
-    optimizer: optax.GradientTransformation,
-    gamma: float,
-    total_kept: int,
-    tau_levels: jnp.ndarray,
-) -> tuple[dict[str, jax.Array], optax.OptState]:
-    grid_quantiles = net.apply(params, GRID_ACTIONS)
-    grid_quantiles_flat = grid_quantiles.reshape(grid_quantiles.shape[0], -1)
-
-    grid_sorted = jnp.sort(grid_quantiles_flat, axis=-1)
-    grid_truncated = grid_sorted[:, :total_kept]
-    grid_q_values = jnp.mean(grid_truncated, axis=-1)
-
-    best_action_idx = jnp.argmax(grid_q_values)
-    next_quantiles = grid_quantiles_flat[best_action_idx]
-    next_sorted = jnp.sort(next_quantiles)
-    next_truncated = next_sorted[:total_kept]
-
-    targets = jnp.broadcast_to(
-        rewards[:, None] + gamma * next_truncated[None, :],
-        (len(rewards), total_kept),
-    )
-
-    def compute_loss(params: dict[str, jax.Array]) -> jax.Array:
-        current_quantiles = net.apply(params, actions)
-        current_quantiles_flat = current_quantiles.reshape(
-            current_quantiles.shape[0], -1
-        )
-
-        targets_expanded = targets[:, None, :]
-        quantiles_expanded = current_quantiles_flat[:, :, None]
-
-        diff = targets_expanded - quantiles_expanded
-        abs_diff = jnp.abs(diff)
-
-        huber = jnp.where(abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5)
-
-        indicator = (diff < 0).astype(jnp.float32)
-        tau_expanded = tau_levels[None, :, None]
-        weights = jnp.abs(tau_expanded - indicator)
-
-        weighted_loss = weights * huber
-        return jnp.mean(weighted_loss)
-
-    grads = jax.grad(compute_loss)(params)
-    updates, new_opt_state = optimizer.update(grads, opt_state)
-    new_params = optax.apply_updates(params, updates)
-    return new_params, new_opt_state
-
-
-@jax.jit
-def evaluate_tqc_ensemble(
-    params: dict[str, jax.Array],
-    net: ZNetwork,
-    eval_actions: jnp.ndarray,
-    total_kept: int,
-) -> jnp.ndarray:
-    quantiles = net.apply(params, eval_actions)
-    quantiles_flat = quantiles.reshape(quantiles.shape[0], -1)
-    sorted_quantiles = jnp.sort(quantiles_flat, axis=-1)
-    truncated = sorted_quantiles[:, :total_kept]
-    return jnp.mean(truncated, axis=-1)
+    return ensemble_evaluator
 
 
 def train_tqc_method(
@@ -318,27 +237,84 @@ def train_tqc_method(
     optimizer = optax.adam(1e-3)
     opt_state = optimizer.init(params)
 
+    grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
+
     tau_levels = jnp.array(
         [(2 * m - 1) / (2 * num_quantiles) for m in range(1, num_quantiles + 1)]
     )
     all_tau = jnp.tile(tau_levels, num_critics)
 
-    for _ in range(iterations):
-        params, opt_state = tqc_update(
-            params,
-            opt_state,
-            actions,
-            rewards,
-            net,
-            optimizer,
-            gamma,
-            total_kept,
-            all_tau,
+    @jax.jit
+    def update(
+        params: dict[str, jax.Array],
+        opt_state: optax.OptState,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState]:
+        grid_quantiles = net.apply(params, grid_actions)
+        grid_quantiles_flat = grid_quantiles.reshape(
+            grid_quantiles.shape[0], -1
         )
 
-    return lambda eval_actions: evaluate_tqc_ensemble(
-        params, net, eval_actions, total_kept
-    )
+        grid_sorted = jnp.sort(grid_quantiles_flat, axis=-1)
+        grid_truncated = grid_sorted[:, :total_kept]
+        grid_q_values = jnp.mean(grid_truncated, axis=-1)
+
+        best_action_idx = jnp.argmax(grid_q_values)
+        next_quantiles = grid_quantiles_flat[best_action_idx]
+        next_sorted = jnp.sort(next_quantiles)
+        next_truncated = next_sorted[:total_kept]
+
+        targets = jnp.broadcast_to(
+            rewards[:, None] + gamma * next_truncated[None, :],
+            (len(rewards), total_kept),
+        )
+
+        grads = jax.grad(compute_loss)(params, actions, targets, all_tau)
+        updates, new_opt_state = optimizer.update(grads, opt_state)
+        new_params = optax.apply_updates(params, updates)
+
+        return new_params, new_opt_state
+
+    @jax.jit
+    def compute_loss(
+        params: dict[str, jax.Array],
+        actions: jnp.ndarray,
+        targets: jnp.ndarray,
+        tau_levels: jnp.ndarray,
+    ) -> jax.Array:
+        current_quantiles = net.apply(params, actions)
+        current_quantiles_flat = current_quantiles.reshape(
+            current_quantiles.shape[0], -1
+        )
+
+        targets_expanded = targets[:, None, :]
+        quantiles_expanded = current_quantiles_flat[:, :, None]
+
+        diff = targets_expanded - quantiles_expanded
+        abs_diff = jnp.abs(diff)
+
+        huber = jnp.where(abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5)
+
+        indicator = (diff < 0).astype(jnp.float32)
+        tau_expanded = tau_levels[None, :, None]
+        weights = jnp.abs(tau_expanded - indicator)
+
+        weighted_loss = weights * huber
+        return jnp.mean(weighted_loss)
+
+    for _ in range(iterations):
+        params, opt_state = update(params, opt_state, actions, rewards)
+
+    @jax.jit
+    def ensemble_evaluator(eval_actions: jnp.ndarray) -> jnp.ndarray:
+        quantiles = net.apply(params, eval_actions)
+        quantiles_flat = quantiles.reshape(quantiles.shape[0], -1)
+        sorted_quantiles = jnp.sort(quantiles_flat, axis=-1)
+        truncated = sorted_quantiles[:, :total_kept]
+        return jnp.mean(truncated, axis=-1)
+
+    return ensemble_evaluator
 
 
 def create_dataset(
