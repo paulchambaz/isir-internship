@@ -15,9 +15,10 @@ __author__ = "Paul Chambaz"
 # from .afu3 import AFU
 from .afu import AFU
 from .afup import AFUP
+from .mlp import MLP
 from .rl_algo import RLAlgo
 from .sac import SAC
 from .simple_right import SimpleRight
 from .tqc import TQC
 
-__all__ = ["AFU", "AFUP", "SAC", "TQC", "Algo", "RLAlgo", "SimpleRight"]
+__all__ = ["AFU", "AFUP", "MLP", "SAC", "TQC", "Algo", "RLAlgo", "SimpleRight"]
