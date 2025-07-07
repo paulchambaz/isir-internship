@@ -345,36 +345,26 @@ class TQC(RLAlgo):
 
         z_values = self.z_network.apply(z_params, states, actions)
 
-        return self._quantile_huber_loss(z_values, z_targets)
-
-    @partial(jax.jit, static_argnums=(0,))
-    def _quantile_huber_loss(
-        self, z_values: jnp.ndarray, z_targets: jnp.ndarray
-    ) -> jnp.ndarray:
-        """Compute quantile Huber loss between predicted and target quantiles."""
-        z_pred = jnp.expand_dims(z_values, axis=-1)
-        z_targ = jnp.expand_dims(z_targets, axis=(1, 2))
-
         tau = jnp.linspace(
             1 / (2 * self.n_quantiles),
             1 - 1 / (2 * self.n_quantiles),
             self.n_quantiles,
         )
+
+        z_values = jnp.expand_dims(z_values, axis=-1)
+        z_targets = jnp.expand_dims(z_targets, axis=(1, 2))
         tau = jnp.expand_dims(tau, axis=(0, 1, 3))
 
-        diff = z_targ - z_pred
+        diff = z_targets - z_values
         abs_diff = jnp.abs(diff)
 
-        huber = jnp.where(
+        huber_loss = jnp.where(
             abs_diff <= 1.0, 0.5 * jnp.square(diff), abs_diff - 0.5
         )
 
-        indicator = (diff < 0).astype(jnp.float32)
-        weights = jnp.abs(tau - indicator)
+        weights = jnp.abs(tau - (diff < 0))
 
-        weighted_loss = weights * huber
-
-        return weighted_loss.mean()
+        return (weights * huber_loss).mean()
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_policy(
