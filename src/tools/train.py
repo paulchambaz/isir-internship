@@ -290,7 +290,7 @@ def main() -> None:
                 alpha=alpha,
                 n_quantiles=25,
                 n_critics=3,
-                quantiles_drop=2,
+                quantiles_drop=1,
                 seed=seed,
             )
         case _:
