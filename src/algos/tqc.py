@@ -230,6 +230,9 @@ class TQC(RLAlgo):
         next_states: torch.Tensor,
         dones: torch.Tensor,
     ) -> torch.Tensor:
+        rewards = rewards.squeeze()
+        dones = dones.squeeze()
+
         # pi(s'), log pi (pi(s') | s')
         next_actions, log_probs = self._compute_action_and_log_prob(next_states)
 
@@ -237,12 +240,13 @@ class TQC(RLAlgo):
             nz_targets = self.z_target_network(next_states, next_actions)
             all_nz_targets = nz_targets.view(nz_targets.shape[0], -1)
             sorted_nz_targets, _ = torch.sort(all_nz_targets, dim=1)
+
             n_quantiles = self.n_critics * (
                 self.n_quantiles - self.quantiles_drop
             )
             truncated_nz_targets = sorted_nz_targets[:, :n_quantiles]
 
-            alpha = self.log_alpha.exp() + 1e-8
+            alpha = self.log_alpha.exp()
             z_targets = rewards.unsqueeze(1) + self.gamma * (
                 1.0 - dones.float().unsqueeze(1)
             ) * (truncated_nz_targets - alpha * log_probs.unsqueeze(1))
@@ -306,7 +310,7 @@ class TQC(RLAlgo):
         huber = torch.where(abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5)
 
         indicator = (diff < 0).float()
-        weights = torch.abs(tau_per_quantile - indicator)
+        weights = torch.abs(tau - indicator)
 
         weighted_loss = weights * huber
         return weighted_loss.mean()
