@@ -71,10 +71,12 @@ class QNetwork(nn.Module):
     num_critics: int
 
     @nn.compact
-    def __call__(self, actions: jnp.ndarray) -> list[jnp.ndarray]:
+    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
         return jnp.asarray(
             [
-                MLP(hidden_dims=self.hidden_dims, output_dim=1)(actions)
+                MLP(hidden_dims=self.hidden_dims, output_dim=1)(
+                    actions
+                ).squeeze(-1)
                 for _ in range(self.num_critics)
             ]
         )
