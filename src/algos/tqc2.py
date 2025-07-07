@@ -11,6 +11,7 @@ import itertools
 import numpy as np
 import torch
 import torch.distributions as dist
+from jax.random import PRNGKey
 from torch import nn
 
 from .replay import ReplayBuffer
@@ -22,6 +23,7 @@ class TQC(RLAlgo):
     __slots__ = [
         "action_dim",
         "batch_size",
+        "buffer",
         "gamma",
         "learn_temperature",
         "log_alpha",
@@ -30,7 +32,7 @@ class TQC(RLAlgo):
         "policy_network",
         "policy_optimizer",
         "quantiles_drop",
-        "replay_buffer",
+        "rng",
         "state_dim",
         "target_entropy",
         "tau",
@@ -59,6 +61,9 @@ class TQC(RLAlgo):
         seed: int,
         state: dict | None = None,
     ) -> None:
+        self.rng = torch.Generator()
+        self.rng.manual_seed(seed)
+
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.n_quantiles = n_quantiles
@@ -96,7 +101,7 @@ class TQC(RLAlgo):
             else None
         )
 
-        self.replay_buffer = ReplayBuffer(replay_size)
+        self.buffer = ReplayBuffer(replay_size, state_dim, action_dim)
         self.batch_size = batch_size
 
         self.target_entropy = -action_dim
@@ -135,19 +140,26 @@ class TQC(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
-        self.replay_buffer.push(state, action, reward, next_state, done)
+        self.buffer.push(state, action, reward, next_state, done)
 
     def update(self) -> None:
         """
         Performs one training step updating Q-networks, policy network, and
         temperature using replay buffer samples.
         """
-        if len(self.replay_buffer) < self.batch_size:
+        if len(self.buffer) < self.batch_size:
             return
 
-        states, actions, rewards, next_states, dones = (
-            self.replay_buffer.sample(self.batch_size)
+        new_seed = torch.randint(0, 2**31 - 1, (1,), generator=self.rng).item()
+        states, actions, rewards, next_states, dones = self.buffer.sample(
+            self.batch_size, PRNGKey(new_seed)
         )
+
+        states = torch.from_numpy(states)
+        actions = torch.from_numpy(actions)
+        rewards = torch.from_numpy(rewards)
+        next_states = torch.from_numpy(next_states)
+        dones = torch.from_numpy(dones)
 
         z_loss = self._compute_z_loss(
             states, actions, rewards, next_states, dones
@@ -180,7 +192,7 @@ class TQC(RLAlgo):
             "log_alpha": self.log_alpha.item(),
             "z_optimizer": self.z_optimizer.state_dict(),
             "policy_optimizer": self.policy_optimizer.state_dict(),
-            "replay_buffer": self.replay_buffer.get_data(),
+            "replay_buffer": self.buffer.get_data(),
         }
 
         if self.learn_temperature:
@@ -203,7 +215,7 @@ class TQC(RLAlgo):
         self.log_alpha.data = torch.tensor(state["log_alpha"])
         self.z_optimizer.load_state_dict(state["z_optimizer"])
         self.policy_optimizer.load_state_dict(state["policy_optimizer"])
-        self.replay_buffer.load_data(state["replay_buffer"])
+        self.buffer.load_data(state["replay_buffer"])
 
         if self.learn_temperature:
             self.temperature_optimizer.load_state_dict(
@@ -218,6 +230,9 @@ class TQC(RLAlgo):
         next_states: torch.Tensor,
         dones: torch.Tensor,
     ) -> torch.Tensor:
+        rewards = rewards.squeeze()
+        dones = dones.squeeze()
+
         # pi(s'), log pi (pi(s') | s')
         next_actions, log_probs = self._compute_action_and_log_prob(next_states)
 
@@ -225,12 +240,13 @@ class TQC(RLAlgo):
             nz_targets = self.z_target_network(next_states, next_actions)
             all_nz_targets = nz_targets.view(nz_targets.shape[0], -1)
             sorted_nz_targets, _ = torch.sort(all_nz_targets, dim=1)
-            n_quantiles = self.n_quantiles * (
-                self.n_critics - self.quantiles_drop
+
+            n_quantiles = self.n_critics * (
+                self.n_quantiles - self.quantiles_drop
             )
             truncated_nz_targets = sorted_nz_targets[:, :n_quantiles]
 
-            alpha = self.log_alpha.exp() + 1e-8
+            alpha = self.log_alpha.exp()
             z_targets = rewards.unsqueeze(1) + self.gamma * (
                 1.0 - dones.float().unsqueeze(1)
             ) * (truncated_nz_targets - alpha * log_probs.unsqueeze(1))
@@ -279,11 +295,14 @@ class TQC(RLAlgo):
         current_expanded = z_values.unsqueeze(-1)
         target_expanded = z_targets.unsqueeze(1).unsqueeze(1)
 
-        tau = torch.linspace(
+        tau_per_quantile = torch.linspace(
             1 / (2 * self.n_quantiles),
             1 - 1 / (2 * self.n_quantiles),
             self.n_quantiles,
-        ).view(1, 1, -1, 1)
+        )
+
+        tau = tau_per_quantile.repeat(self.n_critics, 1)
+        tau = tau.view(1, self.n_critics, self.n_quantiles, 1)
 
         diff = target_expanded - current_expanded
         abs_diff = torch.abs(diff)

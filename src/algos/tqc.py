@@ -6,46 +6,79 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
-import itertools
+import math
+from functools import partial
 
+import flax.linen as nn
+import jax
+import jax.numpy as jnp
 import numpy as np
-import torch
-import torch.distributions as dist
-from jax.random import PRNGKey
-from torch import nn
+import optax
+from jax import random
 
+from .mlp import MLP
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
-from .utils import soft_update_target
 
 
 class TQC(RLAlgo):
+    """
+    Truncated Quantile Critics (TQC) algorithm for continuous control tasks.
+
+    TQC uses distributional critics with quantile regression and truncation
+    to control overestimation bias while maintaining fine-grained control
+    over the bias-variance tradeoff.
+
+    Args:
+        state_dim: Dimensionality of the state space
+        action_dim: Dimensionality of the action space
+        hidden_dims: List of hidden layer sizes for neural networks
+        replay_size: Maximum size of the replay buffer
+        batch_size: Number of samples per training batch
+        critic_lr: Learning rate for Z-function networks
+        policy_lr: Learning rate for policy network
+        temperature_lr: Learning rate for temperature parameter
+        tau: Target network soft update coefficient (0 < tau <= 1)
+        gamma: Discount factor for future rewards (0 < gamma <= 1)
+        alpha: If None, learn alpha, if float, use fixed alpha value
+        n_quantiles: Number of quantiles per critic network
+        n_critics: Number of critic networks in ensemble
+        quantiles_drop: Number of quantiles to drop from truncated mixture
+        seed: Random seed for reproducibility
+        state: Optional pre-trained network state dictionary
+    """
+
     __slots__ = [
         "action_dim",
         "batch_size",
         "buffer",
         "gamma",
+        "key",
         "learn_temperature",
         "log_alpha",
         "n_critics",
         "n_quantiles",
         "policy_network",
+        "policy_opt_state",
         "policy_optimizer",
+        "policy_params",
         "quantiles_drop",
-        "rng",
         "state_dim",
         "target_entropy",
         "tau",
+        "temperature_opt_state",
         "temperature_optimizer",
         "z_network",
+        "z_opt_state",
         "z_optimizer",
-        "z_target_network",
+        "z_params",
+        "z_target_params",
     ]
 
     def __init__(
         self,
-        action_dim: int,
         state_dim: int,
+        action_dim: int,
         hidden_dims: list[int],
         replay_size: int,
         batch_size: int,
@@ -61,76 +94,99 @@ class TQC(RLAlgo):
         seed: int,
         state: dict | None = None,
     ) -> None:
-        self.rng = torch.Generator()
-        self.rng.manual_seed(seed)
+        self.key = random.PRNGKey(seed)
 
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.n_quantiles = n_quantiles
         self.n_critics = n_critics
         self.quantiles_drop = quantiles_drop
-        self.learn_temperature = alpha is None
-
-        self.z_network = self.ZNetwork(
-            state_dim, hidden_dims, action_dim, n_quantiles, n_critics
-        )
-        self.z_target_network = self.ZNetwork(
-            state_dim, hidden_dims, action_dim, n_quantiles, n_critics
-        )
-        self.z_target_network.load_state_dict(self.z_network.state_dict())
-
-        self.policy_network = self.PolicyNetwork(
-            state_dim, hidden_dims, action_dim
-        )
-
-        self.log_alpha = (
-            nn.Parameter(torch.zeros(1))
-            if self.learn_temperature
-            else torch.log(torch.tensor(alpha))
-        )
-
-        self.z_optimizer = torch.optim.Adam(
-            self.z_network.parameters(), lr=critic_lr
-        )
-        self.policy_optimizer = torch.optim.Adam(
-            self.policy_network.parameters(), lr=policy_lr
-        )
-        self.temperature_optimizer = (
-            torch.optim.Adam([self.log_alpha], lr=temperature_lr)
-            if self.learn_temperature
-            else None
-        )
-
-        self.buffer = ReplayBuffer(replay_size, state_dim, action_dim)
         self.batch_size = batch_size
-
-        self.target_entropy = -action_dim
         self.tau = tau
         self.gamma = gamma
+        self.target_entropy = -float(action_dim)
+
+        self.z_network = self.ZNetwork(
+            hidden_dims=hidden_dims,
+            n_quantiles=n_quantiles,
+            n_critics=n_critics,
+        )
+        self.policy_network = self.PolicyNetwork(
+            hidden_dims=hidden_dims, action_dim=action_dim
+        )
+
+        self.key, z_key, policy_key = random.split(self.key, 3)
+
+        dummy_state = jnp.zeros((1, state_dim))
+        dummy_action = jnp.zeros((1, action_dim))
+
+        self.z_params = self.z_network.init(z_key, dummy_state, dummy_action)
+        self.z_target_params = self.z_params
+        self.policy_params = self.policy_network.init(policy_key, dummy_state)
+
+        self.learn_temperature = alpha is None
+        if self.learn_temperature:
+            self.log_alpha = jnp.array(0, dtype=jnp.float32)
+        else:
+            self.log_alpha = jnp.log(jnp.array(alpha, dtype=jnp.float32))
+
+        self.z_optimizer = optax.adam(critic_lr)
+        self.policy_optimizer = optax.adam(policy_lr)
+
+        self.z_opt_state = self.z_optimizer.init(self.z_params)
+        self.policy_opt_state = self.policy_optimizer.init(self.policy_params)
+
+        if self.learn_temperature:
+            self.temperature_optimizer = optax.adam(temperature_lr)
+            self.temperature_opt_state = self.temperature_optimizer.init(
+                self.log_alpha
+            )
+
+        self.buffer = ReplayBuffer(replay_size, state_dim, action_dim)
 
         if state is not None:
             self.load_from_state(state)
 
     def select_action(self, state: np.ndarray, evaluation: bool) -> np.ndarray:
         """
-        Selects an action in range [-1, 1] using deterministic mean
-        (evaluation=True) or stochastic sampling (evaluation=False).
+        Selects an action in range [-1, 1] for the given state using either
+        deterministic or stochastic sampling. Use this method to get actions
+        from your trained agent during environment interaction.
 
         Args:
             state: Current environment state observation
-            evaluation: Whether to use deterministic (True) or stochastic (False)
-             action selection
+            evaluation: Whether to use deterministic or stochastic
         """
-        state = torch.as_tensor(state, dtype=torch.float32).unsqueeze(0)
-        mean, log_std = self.policy_network(state)
+        jax_state = state[None, ...]
 
-        action = (
-            mean
-            if evaluation
-            else dist.Normal(mean, log_std.exp() + 1e-8).rsample()
-        )
+        if evaluation:
+            action = self._exploit(self.policy_params, jax_state)
+        else:
+            self.key, action_key = random.split(self.key)
+            action = self._explore(self.policy_params, jax_state, action_key)
 
-        return torch.tanh(action).squeeze(0).detach().numpy()
+        return np.array(action[0])
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _exploit(
+        self, policy_params: dict[str, any], state: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Select deterministic action using policy mean."""
+        mean, _ = self.policy_network.apply(policy_params, state)
+        return jnp.tanh(mean)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _explore(
+        self,
+        policy_params: dict[str, any],
+        state: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Sample stochastic action from policy distribution."""
+        mean, log_std = self.policy_network.apply(policy_params, state)
+        noise = random.normal(key, mean.shape)
+        raw_action = mean + noise * jnp.exp(log_std)
+        return jnp.tanh(raw_action)
 
     def push_buffer(
         self,
@@ -140,233 +196,394 @@ class TQC(RLAlgo):
         next_state: np.ndarray,
         done: bool,
     ) -> None:
+        """
+        Stores a transition tuple in the replay buffer for later training. Call
+        this method after each environment step to build your training dataset.
+
+        Args:
+            state: Current environment state observation
+            action: Action taken in the environment
+            reward: Reward received from the environment
+            next_state: Next state after taking the action
+            done: Whether the episode terminated
+        """
         self.buffer.push(state, action, reward, next_state, done)
 
     def update(self) -> None:
         """
-        Performs one training step updating Q-networks, policy network, and
-        temperature using replay buffer samples.
+        Performs one training step updating all networks using sampled batch
+        from replay buffer. Call this method regularly during training to
+        improve the agent's performance.
         """
         if len(self.buffer) < self.batch_size:
             return
 
-        new_seed = torch.randint(0, 2**31 - 1, (1,), generator=self.rng).item()
+        self.key, sample_key = random.split(self.key)
         states, actions, rewards, next_states, dones = self.buffer.sample(
-            self.batch_size, PRNGKey(new_seed)
+            self.batch_size, sample_key
         )
 
-        states = torch.from_numpy(states)
-        actions = torch.from_numpy(actions)
-        rewards = torch.from_numpy(rewards)
-        next_states = torch.from_numpy(next_states)
-        dones = torch.from_numpy(dones)
-
-        z_loss = self._compute_z_loss(
-            states, actions, rewards, next_states, dones
+        self.key, critic_key = random.split(self.key)
+        self.z_params, self.z_opt_state = self._update_critic(
+            self.z_params,
+            self.z_opt_state,
+            self.z_target_params,
+            self.policy_params,
+            self.log_alpha,
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            critic_key,
         )
-        self.z_optimizer.zero_grad()
-        z_loss.backward()
-        self.z_optimizer.step()
 
-        soft_update_target(self.z_target_network, self.z_network, self.tau)
-
-        policy_loss = self._compute_policy_loss(states)
-        self.policy_optimizer.zero_grad()
-        policy_loss.backward()
-        self.policy_optimizer.step()
-
-        if self.learn_temperature:
-            temperature_loss = self._compute_temperature_loss(states)
-            self.temperature_optimizer.zero_grad()
-            temperature_loss.backward()
-            self.temperature_optimizer.step()
-
-    def get_state(self) -> dict:
-        """
-        Returns dictionary containing all agent state for saving or transferring.
-        """
-        state = {
-            "z": self.z_network.state_dict(),
-            "z_target": self.z_target_network.state_dict(),
-            "policy": self.policy_network.state_dict(),
-            "log_alpha": self.log_alpha.item(),
-            "z_optimizer": self.z_optimizer.state_dict(),
-            "policy_optimizer": self.policy_optimizer.state_dict(),
-            "replay_buffer": self.buffer.get_data(),
-        }
+        self.key, policy_key = random.split(self.key)
+        self.policy_params, self.policy_opt_state, mean_log_probs = (
+            self._update_policy(
+                self.policy_params,
+                self.policy_opt_state,
+                self.z_params,
+                self.log_alpha,
+                states,
+                policy_key,
+            )
+        )
 
         if self.learn_temperature:
-            state["temperature_optimizer"] = (
-                self.temperature_optimizer.state_dict()
+            self.log_alpha, self.temperature_opt_state = (
+                self._update_temperature(
+                    self.log_alpha, self.temperature_opt_state, mean_log_probs
+                )
             )
 
-        return state
+        self.z_target_params = self._soft_update(
+            self.z_target_params, self.z_params, self.tau
+        )
 
-    def load_from_state(self, state: dict) -> None:
-        """
-        Restores complete agent state from state dictionary.
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_critic(
+        self,
+        z_params: dict[str, jax.Array],
+        z_opt_state: optax.OptState,
+        z_target_params: dict[str, jax.Array],
+        policy_params: dict[str, jax.Array],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState]:
+        """Update Z-network parameters using computed gradients."""
 
-        Args:
-            state: Dictionary of agent state from get_state
-        """
-        self.z_network.load_state_dict(state["z"])
-        self.z_target_network.load_state_dict(state["z_target"])
-        self.policy_network.load_state_dict(state["policy"])
-        self.log_alpha.data = torch.tensor(state["log_alpha"])
-        self.z_optimizer.load_state_dict(state["z_optimizer"])
-        self.policy_optimizer.load_state_dict(state["policy_optimizer"])
-        self.buffer.load_data(state["replay_buffer"])
+        z_grad = jax.grad(self._compute_z_loss)(
+            z_params,
+            z_target_params=z_target_params,
+            policy_params=policy_params,
+            log_alpha=log_alpha,
+            states=states,
+            actions=actions,
+            rewards=rewards,
+            next_states=next_states,
+            dones=dones,
+            key=key,
+        )
 
-        if self.learn_temperature:
-            self.temperature_optimizer.load_state_dict(
-                state["temperature_optimizer"]
-            )
+        z_updates, new_z_opt_state = self.z_optimizer.update(
+            z_grad, z_opt_state
+        )
+        new_z_params = optax.apply_updates(z_params, z_updates)
 
+        return new_z_params, new_z_opt_state
+
+    @partial(jax.jit, static_argnums=(0,))
     def _compute_z_loss(
         self,
-        states: torch.Tensor,
-        actions: torch.Tensor,
-        rewards: torch.Tensor,
-        next_states: torch.Tensor,
-        dones: torch.Tensor,
-    ) -> torch.Tensor:
-        rewards = rewards.squeeze()
-        dones = dones.squeeze()
+        z_params: dict[str, any],
+        z_target_params: dict[str, any],
+        policy_params: dict[str, any],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        actions: jnp.ndarray,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """
+        Compute Z-network loss using quantile regression with truncated targets.
+        """
 
-        # pi(s'), log pi (pi(s') | s')
-        next_actions, log_probs = self._compute_action_and_log_prob(next_states)
+        next_actions, next_log_probs = self._compute_action_and_log_prob(
+            policy_params, next_states, key
+        )
 
-        with torch.no_grad():
-            nz_targets = self.z_target_network(next_states, next_actions)
-            all_nz_targets = nz_targets.view(nz_targets.shape[0], -1)
-            sorted_nz_targets, _ = torch.sort(all_nz_targets, dim=1)
+        rewards = rewards.reshape(-1, 1)
+        dones = dones.reshape(-1, 1)
+        next_log_probs = next_log_probs.reshape(-1, 1)
 
-            n_quantiles = self.n_critics * (
-                self.n_quantiles - self.quantiles_drop
-            )
-            truncated_nz_targets = sorted_nz_targets[:, :n_quantiles]
+        # TODO: why do we stop the gradient of the z network, isnt it what we're trying to update ? also look at the TODO on the sac loss since it is very related
+        z_next_targets = jax.lax.stop_gradient(
+            self.z_network.apply(z_target_params, next_states, next_actions)
+        )
 
-            alpha = self.log_alpha.exp()
-            z_targets = rewards.unsqueeze(1) + self.gamma * (
-                1.0 - dones.float().unsqueeze(1)
-            ) * (truncated_nz_targets - alpha * log_probs.unsqueeze(1))
+        batch_size = z_next_targets.shape[0]
+        all_quantiles = z_next_targets.reshape(batch_size, -1)
+        sorted_quantiles = jnp.sort(all_quantiles, axis=1)
 
-        z_values = self.z_network(states, actions)
+        n_kept = self.n_critics * (self.n_quantiles - self.quantiles_drop)
+        truncated_quantiles = sorted_quantiles[:, :n_kept]
+
+        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
+        z_targets = jax.lax.stop_gradient(
+            rewards
+            + self.gamma
+            * (1.0 - dones)
+            * (truncated_quantiles - alpha * next_log_probs)
+        )
+
+        z_values = self.z_network.apply(z_params, states, actions)
 
         return self._quantile_huber_loss(z_values, z_targets)
 
-    def _compute_policy_loss(self, states: torch.Tensor) -> torch.Tensor:
-        actions, log_probs = self._compute_action_and_log_prob(states)
-
-        z_values = self.z_network(states, actions)
-        q_values = z_values.mean(dim=(1, 2))
-
-        alpha = self.log_alpha.exp() + 1e-8
-        return torch.mean(alpha * log_probs - q_values)
-
-    def _compute_temperature_loss(self, states: torch.Tensor) -> torch.Tensor:
-        _, log_probs = self._compute_action_and_log_prob(states)
-
-        alpha = self.log_alpha.exp() + 1e-8
-        return torch.mean(-alpha * (log_probs.detach() + self.target_entropy))
-
-    def _compute_action_and_log_prob(
-        self, state: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        #  N(mu_theta (s), sigma_theta (s)^2)
-        mean, log_std = self.policy_network(state)
-        gaussian = dist.Normal(mean, log_std.exp())
-
-        # a = tanh(u), u ~ N
-        raw_action = gaussian.rsample()
-        action = torch.tanh(raw_action)
-
-        # log pi(a|s) = log pi(u|s) - sum_i log(1 - a_i)^2
-        log_prob_gaussian = gaussian.log_prob(raw_action)
-        clamped_action = torch.clamp(action, min=-1.0 + 1e-6, max=1.0 - 1e-6)
-        tanh_correction = torch.log1p(-(clamped_action**2))
-        log_prob = (log_prob_gaussian - tanh_correction).sum(dim=-1)
-
-        return action, log_prob
-
+    @partial(jax.jit, static_argnums=(0,))
     def _quantile_huber_loss(
-        self, z_values: torch.Tensor, z_targets: torch.Tensor
-    ) -> torch.Tensor:
-        current_expanded = z_values.unsqueeze(-1)
-        target_expanded = z_targets.unsqueeze(1).unsqueeze(1)
+        self, z_values: jnp.ndarray, z_targets: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Compute quantile Huber loss between predicted and target quantiles."""
+        # TODO: same thing as before, the explicit shape informations are TERRIBLE and evidence that we are not writing things as clean as we could
+        z_pred = z_values[:, :, :, None]
+        z_targ = z_targets[:, None, None, :]
 
-        tau_per_quantile = torch.linspace(
+        tau = jnp.linspace(
             1 / (2 * self.n_quantiles),
             1 - 1 / (2 * self.n_quantiles),
             self.n_quantiles,
         )
+        tau = tau[None, None, :, None]
 
-        tau = tau_per_quantile.repeat(self.n_critics, 1)
-        tau = tau.view(1, self.n_critics, self.n_quantiles, 1)
+        diff = z_targ - z_pred
+        abs_diff = jnp.abs(diff)
 
-        diff = target_expanded - current_expanded
-        abs_diff = torch.abs(diff)
+        huber = jnp.where(
+            abs_diff <= 1.0, 0.5 * jnp.square(diff), abs_diff - 0.5
+        )
 
-        huber = torch.where(abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5)
-
-        indicator = (diff < 0).float()
-        weights = torch.abs(tau - indicator)
+        indicator = (diff < 0).astype(jnp.float32)
+        weights = jnp.abs(tau - indicator)
 
         weighted_loss = weights * huber
+
         return weighted_loss.mean()
 
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_policy(
+        self,
+        policy_params: dict[str, jax.Array],
+        policy_opt_state: optax.OptState,
+        z_params: dict[str, jax.Array],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[dict[str, jax.Array], optax.OptState, jax.Array]:
+        """Update policy network parameters using computed gradients."""
+        policy_grad, mean_log_probs = jax.grad(
+            self._compute_policy_loss, has_aux=True
+        )(
+            policy_params,
+            z_params=z_params,
+            log_alpha=log_alpha,
+            states=states,
+            key=key,
+        )
+
+        policy_updates, new_policy_opt_state = self.policy_optimizer.update(
+            policy_grad, policy_opt_state
+        )
+        new_policy_params = optax.apply_updates(policy_params, policy_updates)
+
+        return new_policy_params, new_policy_opt_state, mean_log_probs
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_policy_loss(
+        self,
+        policy_params: dict[str, any],
+        z_params: dict[str, any],
+        log_alpha: jnp.ndarray,
+        states: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Compute policy loss using mean of all quantiles."""
+
+        actions, log_probs = self._compute_action_and_log_prob(
+            policy_params, states, key
+        )
+
+        z_values = self.z_network.apply(z_params, states, actions)
+        q_values = z_values.mean(axis=(1, 2))
+
+        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
+
+        mean_log_probs = log_probs.mean()
+        mean_q_values = q_values.mean()
+
+        policy_loss = alpha * mean_log_probs - mean_q_values
+
+        return policy_loss, jax.lax.stop_gradient(mean_log_probs)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_temperature(
+        self,
+        log_alpha: jax.Array,
+        temperature_opt_state: optax.OptState,
+        mean_log_probs: jax.Array,
+    ) -> tuple[jax.Array, optax.OptState]:
+        """Update temperature parameter for entropy regularization."""
+
+        temperature_grad = jax.grad(self._compute_temperature_loss)(
+            log_alpha, mean_log_probs
+        )
+
+        temperature_updates, new_temperature_opt_state = (
+            self.temperature_optimizer.update(
+                temperature_grad, temperature_opt_state
+            )
+        )
+        new_log_alpha = optax.apply_updates(log_alpha, temperature_updates)
+
+        return new_log_alpha, new_temperature_opt_state
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_temperature_loss(
+        self,
+        log_alpha: jnp.ndarray,
+        mean_log_probs: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute temperature loss for automatic entropy tuning."""
+
+        return -log_alpha * (self.target_entropy + mean_log_probs)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_action_and_log_prob(
+        self,
+        policy_params: dict[str, any],
+        states: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Sample actions and compute log probabilities."""
+        means, log_stds = self.policy_network.apply(policy_params, states)
+
+        noise = random.normal(key, means.shape)
+        raw_actions = means + noise * jnp.exp(log_stds)
+        actions = jnp.tanh(raw_actions)
+
+        gaussian_log_probs = -0.5 * (
+            jnp.square(noise) + 2 * log_stds + jnp.log(2 * math.pi)
+        )
+
+        tanh_corrections = jnp.log(nn.relu(1.0 - jnp.square(actions)) + 1e-6)
+        log_probs = (gaussian_log_probs - tanh_corrections).sum(
+            axis=1, keepdims=True
+        )
+
+        return actions, log_probs
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _soft_update(
+        self,
+        target_params: dict[str, any],
+        online_params: dict[str, any],
+        tau: float,
+    ) -> dict[str, any]:
+        """Perform soft update of target network parameters."""
+        return jax.tree.map(
+            lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
+        )
+
+    def get_state(self) -> dict[str, any]:
+        """
+        Returns a complete agent state dictionary including all network
+        parameters and optimizer states. Use this method to save your trained
+        agent for later use or checkpointing.
+        """
+        state = {
+            "z_params": self.z_params,
+            "z_target_params": self.z_target_params,
+            "policy_params": self.policy_params,
+            "log_alpha": self.log_alpha,
+            "z_opt_state": self.z_opt_state,
+            "policy_opt_state": self.policy_opt_state,
+            "key": self.key,
+            "replay_buffer": self.buffer.get_data(),
+        }
+
+        if self.learn_temperature:
+            state["temperature_opt_state"] = self.temperature_opt_state
+
+        return state
+
+    def load_from_state(self, state: dict[str, any]) -> None:
+        """
+        Loads complete agent state from a previously saved state dictionary. Use
+        this method to restore a trained agent or continue training from a
+        checkpoint.
+
+        Args:
+            state: Dictionary containing saved agent parameters and states
+        """
+        self.z_params = state["z_params"]
+        self.z_target_params = state["z_target_params"]
+        self.policy_params = state["policy_params"]
+        self.log_alpha = state["log_alpha"]
+        self.z_opt_state = state["z_opt_state"]
+        self.policy_opt_state = state["policy_opt_state"]
+        self.key = state["key"]
+        self.buffer.load_data(state["replay_buffer"])
+
+        if self.learn_temperature and "temperature_opt_state" in state:
+            self.temperature_opt_state = state["temperature_opt_state"]
+
     class ZNetwork(nn.Module):
-        __slots__ = ["networks"]
+        """
+        Distributional critic network outputting quantiles for multiple critics.
+        """
 
-        def __init__(
-            self,
-            state_dim: int,
-            hidden_dims: list[int],
-            action_dim: int,
-            n_quantiles: int,
-            n_critics: int,
-        ) -> None:
-            super().__init__()
-            self.networks = nn.ModuleList()
+        hidden_dims: list[int]
+        n_quantiles: int
+        n_critics: int
 
-            for _ in range(n_critics):
-                layers = [
-                    nn.Linear(state_dim + action_dim, hidden_dims[0]),
-                    nn.ReLU(),
-                ]
-                for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                    layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-                layers.append(nn.Linear(hidden_dims[-1], n_quantiles))
+        @nn.compact
+        def __call__(
+            self, states: jnp.ndarray, actions: jnp.ndarray
+        ) -> jnp.ndarray:
+            states_actions = jnp.concatenate([states, actions], axis=1)
 
-                self.networks.append(nn.Sequential(*layers))
-
-        def forward(
-            self, state: torch.Tensor, action: torch.Tensor
-        ) -> torch.Tensor:
-            state_action = torch.cat([state, action], dim=1)
-            return torch.stack(
-                [network(state_action) for network in self.networks], dim=1
+            return jnp.stack(
+                [
+                    MLP(
+                        hidden_dims=self.hidden_dims,
+                        output_dim=self.n_quantiles,
+                    )(states_actions)
+                    for _ in range(self.n_critics)
+                ],
+                axis=1,
             )
 
     class PolicyNetwork(nn.Module):
-        __slots__ = ["action_dim", "model"]
+        """
+        Policy network that outputs action mean and log standard deviation.
+        """
 
-        def __init__(
-            self, state_dim: int, hidden_dims: list[int], action_dim: int
-        ) -> None:
-            super().__init__()
-            layers = [nn.Linear(state_dim, hidden_dims[0]), nn.ReLU()]
-            for in_dim, out_dim in itertools.pairwise(hidden_dims):
-                layers.extend([nn.Linear(in_dim, out_dim), nn.ReLU()])
-            layers.append(nn.Linear(hidden_dims[-1], action_dim * 2))
+        hidden_dims: list[int]
+        action_dim: int
 
-            self.model = nn.Sequential(*layers)
-            self.action_dim = action_dim
-
-        def forward(
-            self, state: torch.Tensor
-        ) -> tuple[torch.Tensor, torch.Tensor]:
-            output = self.model(state)
-            mean, log_std = torch.split(output, self.action_dim, dim=-1)
-            log_std = torch.clamp(log_std, -20, 2)
+        @nn.compact
+        def __call__(
+            self, states: jnp.ndarray
+        ) -> tuple[jnp.ndarray, jnp.ndarray]:
+            output = MLP(self.hidden_dims, 2 * self.action_dim)(states)
+            mean, log_std = jnp.split(output, 2, axis=1)
+            log_std = jnp.clip(log_std, -10, 2)
             return mean, log_std

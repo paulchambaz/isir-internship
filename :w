@@ -309,10 +309,8 @@ class SAC(RLAlgo):
             policy_params, next_states, key
         )
 
-        q_next_targets_list = jax.lax.stop_gradient(
-            jnp.asarray(
-                self.q_network.apply(q_target_params, next_states, next_actions)
-            )
+        q_next_targets_list = jnp.asarray(
+            self.q_network.apply(q_target_params, next_states, next_actions)
         )
         q_next_targets = jnp.min(q_next_targets_list, axis=0)
 
@@ -410,7 +408,7 @@ class SAC(RLAlgo):
 
         return new_log_alpha, new_temperature_opt_state
 
-    @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=0)
     def _compute_temperature_loss(
         self,
         log_alpha: jnp.ndarray,

@@ -168,9 +168,7 @@ class AFU(RLAlgo):
 
     @partial(jax.jit, static_argnums=(0,))
     def _exploit(
-        self,
-        policy_params: dict[str, any],
-        state: jnp.ndarray,
+        self, policy_params: dict[str, any], state: jnp.ndarray
     ) -> jnp.ndarray:
         """Select deterministic action using policy mean."""
         mean, _ = self.policy_network.apply(policy_params, state)
@@ -225,47 +223,41 @@ class AFU(RLAlgo):
             self.batch_size, sample_key
         )
 
-        (
-            self.q_params,
-            self.v_params,
-            self.q_opt_state,
-            self.v_opt_state,
-        ) = self._update_critic_and_value(
-            self.q_params,
-            self.v_params,
-            self.q_opt_state,
-            self.v_opt_state,
-            self.v_target_params,
-            states,
-            actions,
-            rewards,
-            next_states,
-            dones,
+        self.q_params, self.v_params, self.q_opt_state, self.v_opt_state = (
+            self._update_critic_and_value(
+                self.q_params,
+                self.v_params,
+                self.q_opt_state,
+                self.v_opt_state,
+                self.v_target_params,
+                states,
+                actions,
+                rewards,
+                next_states,
+                dones,
+            )
         )
 
         self.key, policy_key = random.split(self.key)
-        (
-            self.policy_params,
-            self.policy_opt_state,
-            mean_log_probs,
-        ) = self._update_policy(
-            self.policy_params,
-            self.policy_opt_state,
-            self.q_params,
-            self.v_params,
-            self.log_alpha,
-            states,
-            policy_key,
+        self.policy_params, self.policy_opt_state, mean_log_probs = (
+            self._update_policy(
+                self.policy_params,
+                self.policy_opt_state,
+                self.q_params,
+                self.v_params,
+                self.log_alpha,
+                states,
+                policy_key,
+            )
         )
 
         if self.learn_temperature:
-            (
-                self.log_alpha,
-                self.temperature_opt_state,
-            ) = self._update_temperature(
-                self.log_alpha,
-                self.temperature_opt_state,
-                mean_log_probs,
+            self.log_alpha, self.temperature_opt_state = (
+                self._update_temperature(
+                    self.log_alpha,
+                    self.temperature_opt_state,
+                    mean_log_probs,
+                )
             )
 
         self.v_target_params = self._soft_update(
@@ -412,7 +404,7 @@ class AFU(RLAlgo):
 
         means, log_std = self.policy_network.apply(policy_params, states)
 
-        noises = jax.random.normal(key, means.shape)
+        noises = random.normal(key, means.shape)
         raw_actions = means + noises * jnp.exp(log_std)
         actions = jnp.tanh(raw_actions)
 
