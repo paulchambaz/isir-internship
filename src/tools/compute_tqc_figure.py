@@ -294,14 +294,19 @@ def train_tqc_method(
         diff = targets_expanded - quantiles_expanded
         abs_diff = jnp.abs(diff)
 
-        huber = jnp.where(abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5)
+        huber = jnp.where(
+            abs_diff <= 1.0, 0.5 * jnp.square(diff), abs_diff - 0.5
+        )
 
         indicator = (diff < 0).astype(jnp.float32)
         tau_expanded = tau_levels[None, :, None]
         weights = jnp.abs(tau_expanded - indicator)
 
         weighted_loss = weights * huber
-        return jnp.mean(weighted_loss)
+        total_loss = jnp.sum(weighted_loss)
+        return total_loss / (
+            total_kept * num_quantiles * num_critics * actions.shape[0]
+        )
 
     for _ in range(iterations):
         params, opt_state = update(params, opt_state, actions, rewards)
@@ -404,7 +409,7 @@ def main() -> None:
             mdp=mdp,
             buffer_size=50,
             iterations=3000,
-            num_seed=3,
+            num_seed=25,
             train_fn=train_fn,
         )
 
