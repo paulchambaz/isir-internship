@@ -309,8 +309,8 @@ class SAC(RLAlgo):
             policy_params, next_states, key
         )
 
-        q_next_targets_list = jax.lax.stop_gradient(
-            self.q_network.apply(q_target_params, next_states, next_actions)
+        q_next_targets_list = self.q_network.apply(
+            q_target_params, next_states, next_actions
         )
         q_next_targets = jnp.min(q_next_targets_list, axis=0)
 

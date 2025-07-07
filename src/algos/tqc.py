@@ -324,8 +324,8 @@ class TQC(RLAlgo):
         dones = dones.reshape(-1, 1)
         next_log_probs = next_log_probs.reshape(-1, 1)
 
-        z_next_targets = jax.lax.stop_gradient(
-            self.z_network.apply(z_target_params, next_states, next_actions)
+        z_next_targets = self.z_network.apply(
+            z_target_params, next_states, next_actions
         )
 
         batch_size = z_next_targets.shape[0]
