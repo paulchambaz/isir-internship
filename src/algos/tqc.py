@@ -352,16 +352,15 @@ class TQC(RLAlgo):
         self, z_values: jnp.ndarray, z_targets: jnp.ndarray
     ) -> jnp.ndarray:
         """Compute quantile Huber loss between predicted and target quantiles."""
-        # TODO: same thing as before, the explicit shape informations are TERRIBLE and evidence that we are not writing things as clean as we could
-        z_pred = z_values[:, :, :, None]
-        z_targ = z_targets[:, None, None, :]
+        z_pred = jnp.expand_dims(z_values, axis=-1)
+        z_targ = jnp.expand_dims(z_targets, axis=(1, 2))
 
         tau = jnp.linspace(
             1 / (2 * self.n_quantiles),
             1 - 1 / (2 * self.n_quantiles),
             self.n_quantiles,
         )
-        tau = tau[None, None, :, None]
+        tau = jnp.expand_dims(tau, axis=(0, 1, 3))
 
         diff = z_targ - z_pred
         abs_diff = jnp.abs(diff)
