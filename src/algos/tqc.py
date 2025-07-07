@@ -101,7 +101,7 @@ class TQC(RLAlgo):
             else None
         )
 
-        self.buffer = ReplayBuffer(replay_size)
+        self.buffer = ReplayBuffer(replay_size, state_dim, action_dim)
         self.batch_size = batch_size
 
         self.target_entropy = -action_dim
