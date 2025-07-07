@@ -324,7 +324,7 @@ class AFU(RLAlgo):
     ) -> jnp.ndarray:
         """Compute combined loss for Q and V networks with V-A constraints."""
 
-        v_targets_list = jnp.asarray(
+        v_targets_list = jax.lax.stop_gradient(
             self.v_network.apply(v_target_params, next_states)
         )
         v_targets = jnp.min(v_targets_list, axis=0)
@@ -333,15 +333,15 @@ class AFU(RLAlgo):
             rewards + self.gamma * (1.0 - dones) * v_targets
         )
 
-        v_values = jnp.asarray(self.v_network.apply(v_params, states))
+        v_values = self.v_network.apply(v_params, states)
 
         q_values_list = self.q_network.apply(q_params, states, actions)
-        q_values = jnp.asarray(q_values_list[-1:])
+        q_values = q_values_list[-1:]
 
         abs_td = jnp.abs(q_targets - q_values)
         q_loss = (jnp.square(abs_td)).mean()
 
-        a_values = -jnp.asarray(q_values_list[:-1])
+        a_values = -q_values_list[:-1]
 
         mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
         upsilon_values = (
@@ -532,10 +532,14 @@ class AFU(RLAlgo):
             self, states: jnp.ndarray, actions: jnp.ndarray
         ) -> list[jnp.ndarray]:
             states_actions = jnp.concatenate([states, actions], axis=1)
-            return [
-                MLP(hidden_dims=self.hidden_dims, output_dim=1)(states_actions)
-                for _ in range(self.num_critics)
-            ]
+            return jnp.asarray(
+                [
+                    MLP(hidden_dims=self.hidden_dims, output_dim=1)(
+                        states_actions
+                    )
+                    for _ in range(self.num_critics)
+                ]
+            )
 
     class VNetwork(nn.Module):
         """
@@ -548,10 +552,12 @@ class AFU(RLAlgo):
 
         @nn.compact
         def __call__(self, states: jnp.ndarray) -> list[jnp.ndarray]:
-            return [
-                MLP(hidden_dims=self.hidden_dims, output_dim=1)(states)
-                for _ in range(self.num_critics)
-            ]
+            return jnp.asarray(
+                [
+                    MLP(hidden_dims=self.hidden_dims, output_dim=1)(states)
+                    for _ in range(self.num_critics)
+                ]
+            )
 
     class PolicyNetwork(nn.Module):
         """

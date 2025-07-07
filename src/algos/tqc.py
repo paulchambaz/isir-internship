@@ -324,7 +324,6 @@ class TQC(RLAlgo):
         dones = dones.reshape(-1, 1)
         next_log_probs = next_log_probs.reshape(-1, 1)
 
-        # TODO: why do we stop the gradient of the z network, isnt it what we're trying to update ? also look at the TODO on the sac loss since it is very related
         z_next_targets = jax.lax.stop_gradient(
             self.z_network.apply(z_target_params, next_states, next_actions)
         )

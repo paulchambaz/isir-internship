@@ -310,9 +310,7 @@ class SAC(RLAlgo):
         )
 
         q_next_targets_list = jax.lax.stop_gradient(
-            jnp.asarray(
-                self.q_network.apply(q_target_params, next_states, next_actions)
-            )
+            self.q_network.apply(q_target_params, next_states, next_actions)
         )
         q_next_targets = jnp.min(q_next_targets_list, axis=0)
 
@@ -324,9 +322,7 @@ class SAC(RLAlgo):
             * (q_next_targets - alpha * next_log_probs)
         )
 
-        q_values_list = jnp.asarray(
-            self.q_network.apply(q_params, states, actions)
-        )
+        q_values_list = self.q_network.apply(q_params, states, actions)
 
         return jnp.mean(0.5 * (q_values_list - q_targets) ** 2)
 
@@ -374,9 +370,7 @@ class SAC(RLAlgo):
             policy_params, states, key
         )
 
-        q_values_list = jnp.asarray(
-            self.q_network.apply(q_params, states, actions)
-        )
+        q_values_list = self.q_network.apply(q_params, states, actions)
         q_values = jnp.min(q_values_list, axis=0)
 
         alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
@@ -513,10 +507,14 @@ class SAC(RLAlgo):
             self, states: jnp.ndarray, actions: jnp.ndarray
         ) -> list[jnp.ndarray]:
             states_actions = jnp.concatenate([states, actions], axis=1)
-            return [
-                MLP(hidden_dims=self.hidden_dims, output_dim=1)(states_actions)
-                for _ in range(self.num_critics)
-            ]
+            return jnp.asarray(
+                [
+                    MLP(hidden_dims=self.hidden_dims, output_dim=1)(
+                        states_actions
+                    )
+                    for _ in range(self.num_critics)
+                ]
+            )
 
     class PolicyNetwork(nn.Module):
         """
