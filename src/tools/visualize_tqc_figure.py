@@ -171,11 +171,12 @@ def main() -> None:
     plt.draw()
 
     plt.tight_layout()
-    plt.savefig(
-        "paper/figures/tqc_figure.svg",
-        bbox_inches="tight",
-        dpi=300,
-    )
+    plt.show()
+    # plt.savefig(
+    #     "paper/figures/tqc_figure.svg",
+    #     bbox_inches="tight",
+    #     dpi=300,
+    # )
 
 
 if __name__ == "__main__":

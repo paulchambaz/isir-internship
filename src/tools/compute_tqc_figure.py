@@ -131,8 +131,7 @@ def train_avg_method(
         best_q_value = jnp.max(grid_q_values_avg)
 
         targets = jnp.broadcast_to(
-            (rewards + gamma * best_q_value)[None, :, None],
-            (n, len(rewards), 1),
+            (rewards + gamma * best_q_value)[None, :], (n, len(rewards))
         )
 
         grads = jax.grad(compute_loss)(params, actions, targets)
@@ -188,8 +187,7 @@ def train_min_method(
         best_q_value = jnp.max(grid_q_values_min)
 
         targets = jnp.broadcast_to(
-            (rewards + gamma * best_q_value)[None, :, None],
-            (n, len(rewards), 1),
+            (rewards + gamma * best_q_value)[None, :], (n, len(rewards))
         )
 
         grads = jax.grad(compute_loss)(params, actions, targets)
@@ -380,9 +378,12 @@ def compute_bias_variance(
 def main() -> None:
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
-    avg_data = [1, 3, 5, 10, 20, 50]
-    min_data = [2, 3, 4, 6, 8, 10]
-    tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    # avg_data = [1, 3, 5, 10, 20, 50]
+    avg_data = [1, 3, 5]
+    # min_data = [2, 3, 4, 6, 8, 10]
+    min_data = [2, 3, 4]
+    # tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    tqc_data = [0, 1, 2, 3, 4]
 
     experiments = list(
         itertools.chain(
@@ -401,7 +402,7 @@ def main() -> None:
             mdp=mdp,
             buffer_size=50,
             iterations=3000,
-            num_seed=10,
+            num_seed=3,
             train_fn=train_fn,
         )
 
