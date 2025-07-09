@@ -101,12 +101,13 @@ class AvgEnsemble:
         self.optims = [
             torch.optim.Adam(net.parameters(), lr=1e-3) for net in self.networks
         ]
+        self.n = n
         self.gamma = gamma
 
     def update(self, actions: torch.Tensor, rewards: torch.Tensor) -> None:
         targets = self._compute_targets(actions, rewards)
-        for net, opt in zip(self.networks, self.optims, strict=True):
-            self._update_network(net, opt, actions, targets)
+        for i in range(self.n):
+            self._update_network(i, actions, targets)
 
     def _compute_targets(
         self, actions: torch.Tensor, rewards: torch.Tensor
@@ -120,13 +121,13 @@ class AvgEnsemble:
         return targets.detach()
 
     def _update_network(
-        self, net, opt, actions: torch.Tensor, targets: torch.Tensor
+        self, i: int, actions: torch.Tensor, targets: torch.Tensor
     ) -> None:
-        q_vals = net(actions)
+        q_vals = self.networks[i](actions)
         loss = nn.MSELoss()(q_vals, targets.detach())
-        opt.zero_grad()
+        self.optims[i].zero_grad()
         loss.backward()
-        opt.step()
+        self.optims[i].step()
 
     def __call__(self, actions: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
