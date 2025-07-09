@@ -6,6 +6,7 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
+import argparse
 import pickle
 
 import matplotlib.pyplot as plt
@@ -13,7 +14,11 @@ from matplotlib.lines import Line2D
 
 
 def main() -> None:
-    with open("outputs/tqc_figure_results.pkl", "rb") as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--file", type=str, required=True)
+    args = parser.parse_args()
+
+    with open(args.file, "rb") as f:
         results = pickle.load(f)  # noqa: S301
 
     plt.rcParams["font.size"] = 20

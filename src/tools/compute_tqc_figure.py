@@ -117,17 +117,19 @@ def train_avg_method(
     net = QNetwork(hidden_dims=[50, 50], num_critics=n)
     params = net.init(key, actions[:1])
     optimizer = optax.adam(1e-3)
-    opt_state = optimizer.init(params)
+    opt_state = jax.tree_map(
+        lambda x: jnp.stack([optimizer.init(x[i]) for i in range(n)]), params
+    )
 
     grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
 
     @jax.jit
     def update(
         params: dict[str, jax.Array],
-        opt_state: optax.OptState,
+        opt_state: dict[str, jax.Array],
         actions: jnp.ndarray,
         rewards: jnp.ndarray,
-    ) -> tuple[dict[str, jax.Array], optax.OptState]:
+    ) -> tuple[dict[str, jax.Array], dict[str, jax.Array]]:
         grid_q_values = net.apply(params, grid_actions)
         grid_q_values_avg = jnp.mean(grid_q_values, axis=0)
         best_q_value = jnp.max(grid_q_values_avg)
@@ -136,19 +138,21 @@ def train_avg_method(
             (rewards + gamma * best_q_value)[None, :], (n, len(rewards))
         )
 
-        grads = jax.grad(compute_loss)(params, actions, targets)
-        updates, new_opt_states = optimizer.update(grads, opt_state)
-        new_params = optax.apply_updates(params, updates)
+        def compute_loss(params: dict[str, jax.Array], idx: int) -> jax.Array:
+            critic_params = jax.tree_map(lambda x: x[idx], params)
+            values = net.apply(critic_params, actions)[idx]
+            return jnp.mean((values - targets) ** 2)
 
-        return new_params, new_opt_states
+        grad_fn = jax.vmap(jax.grad(compute_loss, argnums=0), in_axes=(None, 0))
+        grads = grad_fn(params, jnp.arange(n))
 
-    @jax.jit
-    def compute_loss(
-        params: dict[str, jax.Array], actions: jnp.ndarray, targets: jnp.ndarray
-    ) -> jax.Array:
-        values = net.apply(params, actions)
-        losses = jnp.mean((values - targets) ** 2, axis=1)
-        return jnp.mean(losses)
+        def update_critic(grad, opt_state: dict[str, jax.Array]):
+            updates, new_opt_states = optimizer.update(grad, opt_state)
+
+        updates, new_opt_state = jax.vmap(update_critic)(grads, opt_state)
+        new_params = jax.tree_map(lambda p, u: p + u, params, updates)
+
+        return new_params, new_opt_state
 
     for _ in range(iterations):
         params, opt_state = update(params, opt_state, actions, rewards)
