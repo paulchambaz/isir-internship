@@ -345,7 +345,7 @@ def main() -> None:
             mdp=mdp,
             buffer_size=64,
             iterations=3000,
-            num_seed=100,
+            num_seed=5,
             train_fn=train_fn,
         )
 
