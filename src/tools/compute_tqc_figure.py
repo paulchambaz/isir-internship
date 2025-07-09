@@ -95,41 +95,48 @@ class ZNetwork(nn.Module):
         return torch.cat([network(action) for network in self.networks], dim=-1)
 
 
+class AvgEnsemble:
+    def __init__(self, n: int, gamma: float) -> None:
+        self.networks = [QNetwork([50, 50]) for _ in range(n)]
+        self.optims = [
+            torch.optim.Adam(net.parameters(), lr=1e-3) for net in self.networks
+        ]
+        self.gamma = gamma
+
+    def update(self, actions: torch.Tensor, rewards: torch.Tensor) -> None:
+        grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
+        grid_q_values = torch.stack(
+            [network(grid_actions) for network in self.networks]
+        ).mean(dim=0)
+        best_q_value = torch.max(grid_q_values)
+        targets = rewards + self.gamma * best_q_value
+
+        current_q_values = [network(actions) for network in self.networks]
+        for opt, q_vals in zip(self.optims, current_q_values, strict=True):
+            loss = nn.MSELoss()(q_vals, targets.detach())
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+
+    def __call__(self, actions: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            outputs = [net(actions) for net in self.networks]
+            return torch.stack(outputs).mean(dim=0)
+
+
 def train_avg_method(
     dataset: tuple[torch.Tensor, torch.Tensor],
     n: int,
     iterations: int,
     gamma: float,
 ) -> nn.Module:
+    ensemble = AvgEnsemble(n, gamma)
+
     actions, rewards = dataset
-    networks = [QNetwork([50, 50]) for _ in range(n)]
-    optims = [torch.optim.Adam(net.parameters(), lr=1e-3) for net in networks]
-
     for _ in range(iterations):
-        grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
-        grid_q_values = torch.stack(
-            [network(grid_actions) for network in networks]
-        ).mean(dim=0)
-        best_q_value = torch.max(grid_q_values)
-        targets = rewards + gamma * best_q_value
+        ensemble.update(actions, rewards)
 
-        current_q_values = [network(actions) for network in networks]
-        for opt, q_vals in zip(optims, current_q_values, strict=True):
-            loss = nn.MSELoss()(q_vals, targets.detach())
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-
-    class MeanEnsembleNetwork:
-        def __init__(self, networks: nn.Module) -> None:
-            self.networks = networks
-
-        def __call__(self, actions: torch.Tensor) -> torch.Tensor:
-            with torch.no_grad():
-                outputs = [net(actions) for net in self.networks]
-                return torch.stack(outputs).mean(dim=0)
-
-    return MeanEnsembleNetwork(networks)
+    return ensemble
 
 
 def train_min_method(
