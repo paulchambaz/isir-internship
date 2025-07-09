@@ -104,19 +104,29 @@ class AvgEnsemble:
         self.gamma = gamma
 
     def update(self, actions: torch.Tensor, rewards: torch.Tensor) -> None:
+        targets = self._compute_targets(actions, rewards)
+        for net, opt in zip(self.networks, self.optims, strict=True):
+            self._update_network(net, opt, actions, targets)
+
+    def _compute_targets(
+        self, actions: torch.Tensor, rewards: torch.Tensor
+    ) -> torch.Tensor:
         grid_actions = torch.linspace(-1, 1, 2001).unsqueeze(-1)
         grid_q_values = torch.stack(
             [network(grid_actions) for network in self.networks]
         ).mean(dim=0)
         best_q_value = torch.max(grid_q_values)
         targets = rewards + self.gamma * best_q_value
+        return targets.detach()
 
-        current_q_values = [network(actions) for network in self.networks]
-        for opt, q_vals in zip(self.optims, current_q_values, strict=True):
-            loss = nn.MSELoss()(q_vals, targets.detach())
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
+    def _update_network(
+        self, net, opt, actions: torch.Tensor, targets: torch.Tensor
+    ) -> None:
+        q_vals = net(actions)
+        loss = nn.MSELoss()(q_vals, targets.detach())
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
 
     def __call__(self, actions: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
