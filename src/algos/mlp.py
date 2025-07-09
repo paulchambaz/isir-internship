@@ -26,6 +26,13 @@ class MLP(nn.Module):
         """Forward pass through the network layers."""
 
         for hidden_dim in self.hidden_dims:
-            x = jax.nn.relu(nn.Dense(hidden_dim)(x))
+            x = jax.nn.relu(
+                nn.Dense(
+                    hidden_dim,
+                    kernel_init=nn.initializers.orthogonal(scale=math.sqrt(2)),
+                )(x)
+            )
 
-        return nn.Dense(self.output_dim)(x)
+        return nn.Dense(
+            self.output_dim, kernel_init=nn.initializers.orthogonal(scale=1)
+        )(x)
