@@ -117,7 +117,7 @@ def train_avg_method(
     net = QNetwork(hidden_dims=[50, 50], num_critics=n)
     params = net.init(key, actions[:1])
     optimizer = optax.adam(1e-3)
-    opt_state = jax.tree_map(
+    opt_state = jax.tree.map(
         lambda x: jnp.stack([optimizer.init(x[i]) for i in range(n)]), params
     )
 
@@ -139,7 +139,7 @@ def train_avg_method(
         )
 
         def compute_loss(params: dict[str, jax.Array], idx: int) -> jax.Array:
-            critic_params = jax.tree_map(lambda x: x[idx], params)
+            critic_params = jax.tree.map(lambda x: x[idx], params)
             values = net.apply(critic_params, actions)[idx]
             return jnp.mean((values - targets) ** 2)
 
@@ -150,7 +150,7 @@ def train_avg_method(
             updates, new_opt_states = optimizer.update(grad, opt_state)
 
         updates, new_opt_state = jax.vmap(update_critic)(grads, opt_state)
-        new_params = jax.tree_map(lambda p, u: p + u, params, updates)
+        new_params = jax.tree.map(lambda p, u: p + u, params, updates)
 
         return new_params, new_opt_state
 
