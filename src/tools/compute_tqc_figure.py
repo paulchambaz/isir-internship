@@ -386,17 +386,17 @@ def main() -> None:
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
     # avg_data = [1, 3, 5, 10, 20, 50]
-    avg_data = [1, 3, 5]
+    avg_data = [1, 3, 5, 10]
     # min_data = [2, 3, 4, 6, 8, 10]
-    min_data = [2, 3, 4]
+    # min_data = [2, 3, 4]
     # tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
-    tqc_data = [0, 1, 2, 3, 4]
+    # tqc_data = [0, 1, 2, 3, 4]
 
     experiments = list(
         itertools.chain(
             [("avg", n, train_avg_method) for n in avg_data],
-            [("min", n, train_min_method) for n in min_data],
-            [("tqc", n, train_tqc_method) for n in tqc_data],
+            # [("min", n, train_min_method) for n in min_data],
+            # [("tqc", n, train_tqc_method) for n in tqc_data],
         )
     )
 
@@ -409,7 +409,7 @@ def main() -> None:
             mdp=mdp,
             buffer_size=50,
             iterations=3000,
-            num_seed=25,
+            num_seed=5,
             train_fn=train_fn,
         )
 
