@@ -104,17 +104,13 @@ class ZNetwork(nn.Module):
     n_critics: int
 
     @nn.compact
-    def __call__(
-        self, states: jnp.ndarray, actions: jnp.ndarray
-    ) -> jnp.ndarray:
-        states_actions = jnp.concatenate([states, actions], axis=1)
-
+    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
         return jnp.stack(
             [
                 MLP(
                     hidden_dims=self.hidden_dims,
                     output_dim=self.n_quantiles,
-                )(states_actions)
+                )(actions)
                 for _ in range(self.n_critics)
             ],
             axis=1,
@@ -175,7 +171,7 @@ class AvgEnsemble:
         opt_state: optax.OptState,
         actions: jnp.ndarray,
         targets: jnp.ndarray,
-    ) -> None:
+    ) -> tuple[dict, optax.OptState]:
         def loss_fn(params: dict) -> jnp.ndarray:
             values = self.network.apply(params, actions)
             return jnp.mean((values - targets) ** 2)
@@ -247,7 +243,7 @@ class MinEnsemble:
         opt_state: optax.OptState,
         actions: jnp.ndarray,
         targets: jnp.ndarray,
-    ) -> None:
+    ) -> tuple[dict, optax.OptState]:
         def loss_fn(params: dict) -> jnp.ndarray:
             values = self.network.apply(params, actions)
             return jnp.mean((values - targets) ** 2)
@@ -276,14 +272,24 @@ class TqcEnsemble:
         self.kept_per_network = self.num_quantiles - n
         self.total_kept = self.kept_per_network * self.num_networks
 
-        self.network = QNetwork(hidden_dims=[50, 50])
+        self.network = ZNetwork(
+            hidden_dims=[50, 50],
+            n_quantiles=self.num_quantiles,
+            n_critics=self.num_networks,
+        )
         self.optim = optax.adam(1e-3)
 
-        dummy_input = jnp.zeros((1, 1))
-        keys = jax.random.split(key, n)
+        self.tau_levels = jnp.array(
+            [
+                (2 * m - 1) / (2 * self.num_quantiles)
+                for m in range(1, self.num_quantiles + 1)
+            ]
+        )
+        self.all_tau = jnp.tile(self.tau_levels, self.num_networks)
 
-        self.params_list = [self.network.init(k, dummy_input) for k in keys]
-        self.opt_states = [self.optim.init(p) for p in self.params_list]
+        dummy_input = jnp.zeros((1, 1))
+        self.params = self.network.init(key, dummy_input)
+        self.opt_state = self.optim.init(self.params)
 
     def set_buffer(self, dataset: list) -> None:
         self.buffer = dataset
@@ -291,31 +297,34 @@ class TqcEnsemble:
     def update(self) -> None:
         actions, rewards = self.buffer
 
-        targets = self._compute_targets(self.params_list, rewards)
+        targets = self._compute_targets(self.params, rewards)
 
-        for i in range(self.n):
-            self.params_list[i], self.opt_states[i] = self._update_network(
-                self.params_list[i],
-                self.opt_states[i],
-                actions,
-                targets,
-            )
+        self.params, self.opt_state = self._update_network(
+            self.params, self.opt_state, actions, targets
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_targets(
         self,
-        params_list: list[dict],
+        params: dict,
         rewards: jnp.ndarray,
     ) -> jnp.ndarray:
         grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
 
-        grid_q_values = jnp.stack(
-            [self.network.apply(params, grid_actions) for params in params_list]
-        ).min(axis=0)
+        grid_quantiles = self.network.apply(params, grid_actions).reshape(
+            grid_actions.shape[0], -1
+        )
+        grid_sorted = jnp.sort(grid_quantiles, axis=-1)
+        grid_truncated = grid_sorted[:, : self.total_kept]
+        grid_q_values = jnp.mean(grid_truncated, axis=-1)
 
-        best_q_value = jnp.max(grid_q_values)
+        best_action_idx = jnp.argmax(grid_q_values)
 
-        return rewards + self.gamma * best_q_value
+        next_quantiles = grid_quantiles[best_action_idx].flatten()
+        next_sorted = jnp.sort(next_quantiles)
+        next_truncated = next_sorted[: self.total_kept]
+
+        return rewards[:, None] + self.gamma * next_truncated[None, :]
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_network(
@@ -324,10 +333,34 @@ class TqcEnsemble:
         opt_state: optax.OptState,
         actions: jnp.ndarray,
         targets: jnp.ndarray,
-    ) -> None:
+    ) -> tuple[dict, optax.OptState]:
         def loss_fn(params: dict) -> jnp.ndarray:
-            values = self.network.apply(params, actions)
-            return jnp.mean((values - targets) ** 2)
+            current_quantiles = self.network.apply(params, actions).reshape(
+                actions.shape[0], -1
+            )
+
+            targets_expanded = targets[:, None, :]
+            quantiles_expanded = current_quantiles[:, :, None]
+
+            diff = targets_expanded - quantiles_expanded
+            abs_diff = jnp.abs(diff)
+
+            huber = jnp.where(
+                abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5
+            )
+
+            indicator = (diff < 0).astype(jnp.float32)
+            tau_expanded = self.all_tau[None, :, None]
+            weights = jnp.abs(tau_expanded - indicator)
+
+            weighted_loss = weights * huber
+            total_loss = jnp.sum(weighted_loss)
+
+            normalization = (
+                targets.shape[0] * current_quantiles.shape[1] * targets.shape[1]
+            )
+
+            return total_loss / normalization
 
         grads = jax.grad(loss_fn)(params)
         updates, new_opt_state = self.optim.update(grads, opt_state)
@@ -337,9 +370,12 @@ class TqcEnsemble:
 
     @partial(jax.jit, static_argnums=(0,))
     def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
-        return jnp.stack(
-            [self.network.apply(params, actions) for params in self.params_list]
-        ).min(axis=0)
+        quantiles = self.network.apply(self.params, actions)
+        union_quantiles = quantiles.reshape(actions.shape[0], -1)
+        sorted_quantiles = jnp.sort(union_quantiles, axis=-1)
+        truncated = sorted_quantiles[:, : self.total_kept]
+
+        return jnp.mean(truncated, axis=-1)
 
 
 def train_avg_method(
@@ -422,10 +458,10 @@ def compute_bias_variance(
     optim_actions = []
 
     for seed in range(num_seed):
-        rng = np.random.default_rng(seed)
+        rng = np.random.default_rng(seed + n * num_seed)
         dataset = create_dataset(mdp, buffer_size, rng)
 
-        key = random.PRNGKey(seed)
+        key = random.PRNGKey(seed + n * num_seed)
         trained_net = train_fn(dataset, n, iterations, mdp.gamma, key)
 
         eval_actions = jnp.linspace(-1, 1, 2000).reshape(-1, 1)
@@ -453,13 +489,16 @@ def compute_bias_variance(
 def main() -> None:
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
-    avg_data = [1, 3, 5, 10, 20, 50]
-    min_data = [2, 3, 4, 6, 8, 10]
+    # avg_data = [1, 3, 5, 10, 20, 50]
+    # min_data = [2, 3, 4, 6, 8, 10]
+    # tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
 
     experiments = list(
         itertools.chain(
-            [("avg", n, train_avg_method) for n in avg_data],
-            [("min", n, train_min_method) for n in min_data],
+            # [("avg", n, train_avg_method) for n in avg_data],
+            # [("min", n, train_min_method) for n in min_data],
+            [("tqc", n, train_tqc_method) for n in tqc_data],
         )
     )
 
@@ -472,7 +511,7 @@ def main() -> None:
             mdp=mdp,
             buffer_size=50,
             iterations=3000,
-            num_seed=25,
+            num_seed=1,
             train_fn=train_fn,
         )
 
