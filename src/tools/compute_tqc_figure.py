@@ -265,6 +265,83 @@ class MinEnsemble:
         ).min(axis=0)
 
 
+class TqcEnsemble:
+    def __init__(self, n: int, gamma: float, key: jnp.ndarray) -> None:
+        self.n = n
+        self.gamma = gamma
+        self.buffer = None
+
+        self.num_quantiles = 25
+        self.num_networks = 2
+        self.kept_per_network = self.num_quantiles - n
+        self.total_kept = self.kept_per_network * self.num_networks
+
+        self.network = QNetwork(hidden_dims=[50, 50])
+        self.optim = optax.adam(1e-3)
+
+        dummy_input = jnp.zeros((1, 1))
+        keys = jax.random.split(key, n)
+
+        self.params_list = [self.network.init(k, dummy_input) for k in keys]
+        self.opt_states = [self.optim.init(p) for p in self.params_list]
+
+    def set_buffer(self, dataset: list) -> None:
+        self.buffer = dataset
+
+    def update(self) -> None:
+        actions, rewards = self.buffer
+
+        targets = self._compute_targets(self.params_list, rewards)
+
+        for i in range(self.n):
+            self.params_list[i], self.opt_states[i] = self._update_network(
+                self.params_list[i],
+                self.opt_states[i],
+                actions,
+                targets,
+            )
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_targets(
+        self,
+        params_list: list[dict],
+        rewards: jnp.ndarray,
+    ) -> jnp.ndarray:
+        grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
+
+        grid_q_values = jnp.stack(
+            [self.network.apply(params, grid_actions) for params in params_list]
+        ).min(axis=0)
+
+        best_q_value = jnp.max(grid_q_values)
+
+        return rewards + self.gamma * best_q_value
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _update_network(
+        self,
+        params: dict,
+        opt_state: optax.OptState,
+        actions: jnp.ndarray,
+        targets: jnp.ndarray,
+    ) -> None:
+        def loss_fn(params: dict) -> jnp.ndarray:
+            values = self.network.apply(params, actions)
+            return jnp.mean((values - targets) ** 2)
+
+        grads = jax.grad(loss_fn)(params)
+        updates, new_opt_state = self.optim.update(grads, opt_state)
+        new_params = optax.apply_updates(params, updates)
+
+        return new_params, new_opt_state
+
+    @partial(jax.jit, static_argnums=(0,))
+    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
+        return jnp.stack(
+            [self.network.apply(params, actions) for params in self.params_list]
+        ).min(axis=0)
+
+
 def train_avg_method(
     dataset: tuple[jnp.ndarray, jnp.ndarray],
     n: int,
@@ -297,20 +374,20 @@ def train_min_method(
     return ensemble
 
 
-# def train_tqc_method(
-#     dataset: tuple[jnp.ndarray, jnp.ndarray],
-#     n: int,
-#     iterations: int,
-#     gamma: float,
-#     key: jnp.ndarray,
-# ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-#     ensemble = TQCEnsemble(n, gamma, key)
-#     ensemble.set_buffer(dataset)
-#
-#     for _ in range(iterations):
-#         ensemble.update()
-#
-#     return ensemble
+def train_tqc_method(
+    dataset: tuple[jnp.ndarray, jnp.ndarray],
+    n: int,
+    iterations: int,
+    gamma: float,
+    key: jnp.ndarray,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    ensemble = TqcEnsemble(n, gamma, key)
+    ensemble.set_buffer(dataset)
+
+    for _ in range(iterations):
+        ensemble.update()
+
+    return ensemble
 
 
 def create_dataset(
@@ -395,7 +472,7 @@ def main() -> None:
             mdp=mdp,
             buffer_size=50,
             iterations=3000,
-            num_seed=1,
+            num_seed=25,
             train_fn=train_fn,
         )
 
