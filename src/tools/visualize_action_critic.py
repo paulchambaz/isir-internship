@@ -36,7 +36,7 @@ def get_figure(
     i: int, state_dict: dict, position: float, velocity: float, bounds: Bounds
 ) -> None:
     action_dim = 1
-    hidden_dims = [256, 256]
+    hidden_dims = [64, 64]
 
     q_network = algos.AFU.QNetwork(hidden_dims=hidden_dims, num_critics=3)
     v_network = algos.AFU.VNetwork(hidden_dims=hidden_dims, num_critics=2)
