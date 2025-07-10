@@ -44,7 +44,7 @@ def get_figure(
         hidden_dims=hidden_dims, action_dim=action_dim
     )
 
-    state = jnp.tensor([[position, velocity]], dtype=jnp.float32)
+    state = jnp.array([[position, velocity]], dtype=jnp.float32)
 
     q_params = state_dict["q_params"]
     v_params = state_dict["v_params"]
