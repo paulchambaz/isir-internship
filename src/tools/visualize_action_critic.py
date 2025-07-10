@@ -51,7 +51,7 @@ def get_figure(
     policy_params = state_dict["policy_params"]
 
     v_values_list = v_network.apply(v_params, state)
-    v_value = float(jnp.min(jnp.stack(v_values_list), dim=0)[0])
+    v_value = float(jnp.min(jnp.stack(v_values_list), axis=0)[0])
 
     mean, log_std = policy_network.apply(policy_params, state)
     policy_action = float(jnp.tanh(mean).squeeze())
