@@ -292,13 +292,13 @@ def display_visualization(
     path = "outputs/mountaincar_critic_policy"
     Path(path).mkdir(exist_ok=True)
     plt.tight_layout()
-    plt.show()
-    # plt.savefig(
-    #     f"{path}/{i:05d}.png",
-    #     bbox_inches="tight",
-    #     pad_inches=0,
-    #     dpi=300,
-    # )
+    # plt.show()
+    plt.savefig(
+        f"{path}/{i:05d}.png",
+        bbox_inches="tight",
+        pad_inches=0,
+        dpi=300,
+    )
     plt.close()
 
 
