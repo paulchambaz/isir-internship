@@ -51,15 +51,15 @@ def get_figure(
     policy_params = state_dict["policy_params"]
 
     v_values_list = v_network.apply(v_params, state)
-    v_value = float(jnp.min(jnp.stack(v_values_list), axis=0)[0])
+    v_value = float(jnp.min(jnp.stack(v_values_list), axis=0).squeeze())
 
     mean, log_std = policy_network.apply(policy_params, state)
     policy_action = float(jnp.tanh(mean).squeeze())
 
     n_actions = 100
     actions = np.linspace(-1.0, 1.0, n_actions)
-    actions_tensor = jnp.tensor(actions, dtype=jnp.float32).unsqueeze(1)
-    states_batch = state.tile(state, (n_actions, 1))
+    actions_tensor = jnp.array(actions, dtype=jnp.float32).reshape(-1, 1)
+    states_batch = jnp.tile(state, (n_actions, 1))
 
     q_values_list = q_network.apply(q_params, states_batch, actions_tensor)
     a_values = -(q_values_list[0] + q_values_list[1]).squeeze() / 2
