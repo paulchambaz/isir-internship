@@ -12,15 +12,12 @@ import pickle
 from dataclasses import dataclass
 from pathlib import Path
 
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 from tqdm import tqdm
 
 import algos
-
-ACTION_MIN = -1.0
-ACTION_MAX = 1.0
 
 COLORS = ["#6ca247", "#d66b6a", "#5591e1", "#39a985", "#ad75ca", "#c77c1e"]
 
@@ -38,40 +35,38 @@ class Bounds:
 def get_figure(
     i: int, state_dict: dict, position: float, velocity: float, bounds: Bounds
 ) -> None:
-    state_dim = 2
     action_dim = 1
     hidden_dims = [256, 256]
 
-    q_net = algos.AFU.QNetwork(
-        state_dim, action_dim, hidden_dims, num_critics=3
+    q_network = algos.AFU.QNetwork(hidden_dims=hidden_dims, num_critics=3)
+    v_network = algos.AFU.VNetwork(hidden_dims=hidden_dims, num_critics=2)
+    policy_network = algos.AFU.PolicyNetwork(
+        hidden_dims=hidden_dims, action_dim=action_dim
     )
-    q_net.load_state_dict(state_dict["q_network"])
 
-    v_net = algos.AFU.VNetwork(state_dim, hidden_dims, num_critics=2)
-    v_net.load_state_dict(state_dict["v_network"])
+    state = jnp.tensor([[position, velocity]], dtype=jnp.float32)
 
-    policy_net = algos.AFU.PolicyNetwork(
-        state_dim, action_dim, hidden_dims, log_std_min=10.0, log_std_max=2.0
-    )
-    policy_net.load_state_dict(state_dict["policy_network"])
+    q_params = state_dict["q_params"]
+    v_params = state_dict["v_params"]
+    policy_params = state_dict["policy_params"]
 
-    state = torch.tensor([[position, velocity]], dtype=torch.float32)
+    v_values_list = v_network.apply(v_params, state)
+    v_value = float(jnp.min(jnp.stack(v_values_list), dim=0)[0])
 
-    with torch.no_grad():
-        v_values_list = v_net(state)
-        v_value = float(torch.min(torch.stack(v_values_list), dim=0)[0])
-        mean, log_std = policy_net(state)
-        policy_action = float(torch.tanh(mean).squeeze())
+    mean, log_std = policy_network.apply(policy_params, state)
+    policy_action = float(jnp.tanh(mean).squeeze())
 
     n_actions = 100
-    actions = np.linspace(ACTION_MIN, ACTION_MAX, n_actions)
-    actions_tensor = torch.tensor(actions, dtype=torch.float32).unsqueeze(1)
-    states_batch = state.expand(n_actions, -1)
+    actions = np.linspace(-1.0, 1.0, n_actions)
+    actions_tensor = jnp.tensor(actions, dtype=jnp.float32).unsqueeze(1)
+    states_batch = state.tile(state, (n_actions, 1))
 
-    with torch.no_grad():
-        q_values_list = q_net(states_batch, actions_tensor)
-        a_values = -(q_values_list[0] + q_values_list[1]).squeeze().numpy() / 2
-        q_values = q_values_list[2].squeeze().numpy()
+    q_values_list = q_network.apply(q_params, states_batch, actions_tensor)
+    a_values = -(q_values_list[0] + q_values_list[1]).squeeze() / 2
+    q_values = q_values_list[2].squeeze()
+
+    a_values = np.array(a_values)
+    q_values = np.array(q_values)
 
     mode_action_idx = np.argmax(q_values)
     mode_action = actions[mode_action_idx]
@@ -267,7 +262,14 @@ def main() -> None:
     )
     total_states = len(checkpoint_files) * 100
 
-    bounds = Bounds()
+    bounds = Bounds(
+        max_1=0,
+        min_1=0,
+        max_2=0,
+        min_2=0,
+        max_3=0,
+        min_3=0,
+    )
 
     with tqdm(total=total_states) as pbar:
         for checkpoint_file in checkpoint_files:
