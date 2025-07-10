@@ -262,13 +262,15 @@ class MinEnsemble:
 
 
 class TqcEnsemble:
-    def __init__(self, n: int, gamma: float, key: jnp.ndarray) -> None:
+    def __init__(
+        self, n: int, num_networks: int, gamma: float, key: jnp.ndarray
+    ) -> None:
         self.n = n
         self.gamma = gamma
         self.buffer = None
 
         self.num_quantiles = 25
-        self.num_networks = 2
+        self.num_networks = num_networks
         self.kept_per_network = self.num_quantiles - n
         self.total_kept = self.kept_per_network * self.num_networks
 
@@ -378,52 +380,20 @@ class TqcEnsemble:
         return jnp.mean(truncated, axis=-1)
 
 
-def train_avg_method(
-    dataset: tuple[jnp.ndarray, jnp.ndarray],
-    n: int,
-    iterations: int,
-    gamma: float,
-    key: jnp.ndarray,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    ensemble = AvgEnsemble(n, gamma, key)
-    ensemble.set_buffer(dataset)
-
-    for _ in range(iterations):
-        ensemble.update()
-
-    return ensemble
+def create_avg(n: int, gamma: float, key: jnp.ndarray) -> AvgEnsemble:
+    return AvgEnsemble(n, gamma, key)
 
 
-def train_min_method(
-    dataset: tuple[jnp.ndarray, jnp.ndarray],
-    n: int,
-    iterations: int,
-    gamma: float,
-    key: jnp.ndarray,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    ensemble = MinEnsemble(n, gamma, key)
-    ensemble.set_buffer(dataset)
-
-    for _ in range(iterations):
-        ensemble.update()
-
-    return ensemble
+def create_min_ensemble(n: int, gamma: float, key: jnp.ndarray) -> MinEnsemble:
+    return MinEnsemble(n, gamma, key)
 
 
-def train_tqc_method(
-    dataset: tuple[jnp.ndarray, jnp.ndarray],
-    n: int,
-    iterations: int,
-    gamma: float,
-    key: jnp.ndarray,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    ensemble = TqcEnsemble(n, gamma, key)
-    ensemble.set_buffer(dataset)
+def create_tqc_ensemble(n: int, gamma: float, key: jnp.ndarray) -> TqcEnsemble:
+    return TqcEnsemble(n, 2, gamma, key)
 
-    for _ in range(iterations):
-        ensemble.update()
 
-    return ensemble
+def create_ttqc_ensemble(n: int, gamma: float, key: jnp.ndarray) -> TqcEnsemble:
+    return TqcEnsemble(n, 1, gamma, key)
 
 
 def create_dataset(
@@ -447,72 +417,89 @@ def compute_bias_variance(
     n: int,
     mdp: ToyMdp,
     buffer_size: int,
-    iterations: int,
+    total_steps: int,
+    eval_freq: int,
     num_seed: int,
-    train_fn: Callable[
-        [tuple[jnp.ndarray, jnp.ndarray], int, int, float, jnp.ndarray],
-        Callable[[jnp.ndarray], jnp.ndarray],
-    ],
-) -> None:
-    errors = []
-    optim_actions = []
+    create_ensemble_fn: Callable,
+) -> dict:
+    step_results = {}
 
     for seed in range(num_seed):
         rng = np.random.default_rng(seed + n * num_seed)
         dataset = create_dataset(mdp, buffer_size, rng)
 
         key = random.PRNGKey(seed + n * num_seed)
-        trained_net = train_fn(dataset, n, iterations, mdp.gamma, key)
+        ensemble = create_ensemble_fn(n, mdp.gamma, key)
+        ensemble.set_buffer(dataset)
 
-        eval_actions = jnp.linspace(-1, 1, 2000).reshape(-1, 1)
+        for step in range(eval_freq, total_steps + 1, eval_freq):
+            for _ in range(eval_freq):
+                ensemble.update()
 
-        predicted_q = np.array(trained_net(eval_actions))
-        true_q = np.array([mdp.true_q_value(a.item()) for a in eval_actions])
+            eval_actions = jnp.linspace(-1, 1, 2000).reshape(-1, 1)
 
-        error = predicted_q - true_q
-        errors.append(error)
+            predicted_q = np.array(ensemble(eval_actions))
+            true_q = np.array(
+                [mdp.true_q_value(a.item()) for a in eval_actions]
+            )
 
-        optim_action = eval_actions[np.argmax(predicted_q)].item()
-        optim_actions.append(optim_action)
+            error = predicted_q - true_q
+            bias = np.mean(error)
+            variance = np.var(error)
 
-    errors = np.array(errors)
+            optim_action = eval_actions[np.argmax(predicted_q)].item()
+            policy_error = np.abs(optim_action - mdp.optimal_action)
 
-    bias = robust_mean(np.mean(errors, axis=1), 0.1, 0.9)
-    variance = robust_mean(np.var(errors, axis=1), 0.1, 0.9)
-    policy_error = robust_mean(
-        np.abs(optim_actions - mdp.optimal_action), 0.1, 0.9
-    )
+            if step not in step_results:
+                step_results[step] = []
+            step_results[step].append((bias, variance, policy_error))
 
-    return bias, variance, policy_error
+    final_results = {}
+    for step, results in step_results.items():
+        res = np.array(results)
+        biases = res[:, 0]
+        variances = res[:, 1]
+        policy_errors = res[:, 2]
+
+        final_results[step] = (
+            robust_mean(biases, 0.1, 0.9),
+            robust_mean(variances, 0.1, 0.9),
+            robust_mean(policy_errors, 0.1, 0.9),
+        )
+
+    return final_results
 
 
 def main() -> None:
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
-    # avg_data = [1, 3, 5, 10, 20, 50]
-    # min_data = [2, 3, 4, 6, 8, 10]
-    # tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    avg_data = [1, 3, 5, 10, 20, 50]
+    min_data = [2, 3, 4, 6, 8, 10]
     tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
 
     experiments = list(
         itertools.chain(
-            # [("avg", n, train_avg_method) for n in avg_data],
-            # [("min", n, train_min_method) for n in min_data],
-            [("tqc", n, train_tqc_method) for n in tqc_data],
+            [("avg", n, create_avg) for n in avg_data],
+            [("min", n, create_min_ensemble) for n in min_data],
+            [("tqc", n, create_tqc_ensemble) for n in tqc_data],
+            [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
         )
     )
 
     results = {}
 
-    for method, n, train_fn in tqdm(experiments, desc="Running experiments"):
-        tqdm.write(f"Processing {method} with n={n}")
+    progress_bar = tqdm(experiments, desc="Running experiments")
+
+    for method, n, create_ensemble_fn in progress_bar:
+        progress_bar.set_postfix({"method": method, "n": n})
         results[(method, n)] = compute_bias_variance(
             n=n,
             mdp=mdp,
             buffer_size=50,
-            iterations=3000,
-            num_seed=1,
-            train_fn=train_fn,
+            total_steps=10000,
+            eval_freq=100,
+            num_seed=20,
+            create_ensemble_fn=create_ensemble_fn,
         )
 
     print(results)
