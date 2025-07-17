@@ -17,36 +17,53 @@ from .utils import compute_stats
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Test RL algorithms")
-    parser.add_argument("--sac", type=str, help="SAC history file")
-    parser.add_argument("--afu", type=str, help="AFU history file")
-    parser.add_argument("--afup", type=str, help="AFUP history file")
-    parser.add_argument("--tqc", type=str, help="TQC history file")
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(
+        description="Visualize RL training curves",
+        usage="%(prog)s --ALGO1 file1.pk --ALGO2 file2.pk [--ALGO3 file3.pk ...]",
+    )
+
+    known_args, unknown_args = parser.parse_known_args()
+
+    algo_files = {}
+    i = 0
+    while i < len(unknown_args):
+        if unknown_args[i].startswith("--") and i + 1 < len(unknown_args):
+            algo_name = unknown_args[i][2:]
+            file_path = unknown_args[i + 1]
+
+            if not file_path.startswith("--"):
+                algo_files[algo_name] = file_path
+                i += 2
+            else:
+                i += 1
+        else:
+            i += 1
+
+    if not algo_files:
+        parser.print_help()
+        print(
+            "\nExample: python script.py --SAC sac_history.pk --AFU afu_history.pk --AFUTEST test_history.pk"
+        )
+        return
 
     colors = ["#d66b6a", "#5591e1", "#6ca247", "#39a985", "#ad75ca", "#c77c1e"]
-
     plt.rcParams["font.size"] = 20
     plt.rcParams["text.usetex"] = True
     plt.rcParams["font.family"] = "serif"
 
     fig, ax = plt.subplots(figsize=(6, 6))
-    for i, algo_name in enumerate(["sac", "afu", "tqc", "afup"]):
-        file_path = getattr(args, algo_name)
-        if file_path:
-            with open(file_path, "rb") as f:
-                history = pickle.load(f)  # noqa: S301
+    for i, (algo_name, file_path) in enumerate(algo_files.items()):
+        with open(file_path, "rb") as f:
+            history = pickle.load(f)  # noqa: S301
 
-            steps = [k * 50 for k in history]
-            stats = [compute_stats(results) for results in history.values()]
-            mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
+        steps = [k * 200 for k in history]
+        stats = [compute_stats(results) for results in history.values()]
+        mins, q1s, iqms, q3s, maxs = zip(*stats, strict=True)
 
-            color = colors[i % len(colors)]
+        color = colors[i % len(colors)]
 
-            ax.plot(
-                steps, iqms, linewidth=2, color=color, label=algo_name.upper()
-            )
-            ax.fill_between(steps, q1s, q3s, alpha=0.25, color=color)
+        ax.plot(steps, iqms, linewidth=2, color=color, label=algo_name.upper())
+        ax.fill_between(steps, q1s, q3s, alpha=0.25, color=color)
 
     ax.set_xlabel("Training Steps")
     plt.gca().xaxis.set_major_formatter(
