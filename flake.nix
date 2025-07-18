@@ -66,6 +66,7 @@
           };
 
           shellHook = ''
+            export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/nvidia/lib:$LD_LIBRARY_PATH"
             uv sync --quiet --dev
             source .venv/bin/activate
           '';
