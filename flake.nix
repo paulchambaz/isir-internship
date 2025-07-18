@@ -14,7 +14,9 @@
       system: let
         pkgs = import nixpkgs {
           inherit system;
-          config = {allowUnfree = true;};
+          config = {
+            allowUnfree = true;
+          };
         };
       in {
         devShells.default = pkgs.mkShell {
@@ -56,8 +58,11 @@
               zlib
               gfortran.cc.lib
               swig
+              cudatoolkit.lib
+              linuxPackages.nvidia_x11
             ];
             MPLBACKEND = "TkAgg";
+            CUDA_PATH = "${cudatoolkit}";
           };
 
           shellHook = ''
