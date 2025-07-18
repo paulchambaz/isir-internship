@@ -13,12 +13,17 @@ import pickle
 from pathlib import Path
 
 import gymnasium as gym
+import jax
 import numpy as np
 from tqdm import tqdm
 
 import algos
 
 from .utils import compute_stats
+
+print(f"JAX devices: {jax.devices()}")
+print(f"JAX default device: {jax.devices()[0]}")
+print(f"JAX using: {jax.devices()[0].device_kind}")
 
 
 def train(
