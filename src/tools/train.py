@@ -6,6 +6,10 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
+import os
+
+os.environ["JAX_PLATFORM_NAME"] = "cpu"
+
 import argparse
 import copy
 import gc
@@ -13,17 +17,12 @@ import pickle
 from pathlib import Path
 
 import gymnasium as gym
-import jax
 import numpy as np
 from tqdm import tqdm
 
 import algos
 
 from .utils import compute_stats
-
-print(f"JAX devices: {jax.devices()}")
-print(f"JAX default device: {jax.devices()[0]}")
-print(f"JAX using: {jax.devices()[0].device_kind}")
 
 
 def train(
