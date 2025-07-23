@@ -33,6 +33,8 @@
             cudaPackages.cudatoolkit
             cudaPackages.cudnn
             cudaPackages.libcusparse
+            cudaPackages.libcublas
+            cudaPackages.libcufft
           ];
 
           env = with pkgs; {
@@ -61,13 +63,26 @@
               zlib
               gfortran.cc.lib
               swig
+              cudaPackages.cudatoolkit
+              cudaPackages.cudnn
+              cudaPackages.libcusparse
+              cudaPackages.libcublas
+              cudaPackages.libcufft
             ];
             MPLBACKEND = "TkAgg";
+
+            CUDA_ROOT = "${cudaPackages.cudatoolkit}";
+            CUDA_HOME = "${cudaPackages.cudatoolkit}";
+            CUDNN_PATH = "${cudaPackages.cudnn}";
+            XLA_FLAGS = "--xla_gpu_cuda_data_dir=${cudaPackages.cudatoolkit}";
           };
 
           shellHook = ''
             uv sync --quiet --dev
             source .venv/bin/activate
+
+            echo "CUDA toolkit path: ${pkgs.cudaPackages.cudatoolkit}"
+            echo "CUDNN path: ${pkgs.cudaPackages.cudnn}"
           '';
         };
       }
