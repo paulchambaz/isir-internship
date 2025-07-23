@@ -6,13 +6,11 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
-import os
-
-os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
 import argparse
 import copy
 import gc
+import os
 import pickle
 from pathlib import Path
 
@@ -205,7 +203,13 @@ def main() -> None:
         default=1,
         help="Number of runs for the experiment",
     )
+    parser.add_argument(
+        "--cpu", action="store_true", help="Force JAX to use CPU instead of GPU"
+    )
     args = parser.parse_args()
+
+    if args.cpu:
+        os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
     env_name = envs[args.env]
     train_env = gym.make(env_name)
