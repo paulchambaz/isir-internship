@@ -326,21 +326,27 @@ class AFU(RLAlgo):
 
         v_targets_list = self.v_network.apply(v_target_params, next_states)
         v_targets = jnp.min(v_targets_list, axis=0)
-
         q_targets = jax.lax.stop_gradient(
             rewards + self.gamma * (1.0 - dones) * v_targets
         )
 
         v_values = self.v_network.apply(v_params, states)
-
         q_values_list = self.q_network.apply(q_params, states, actions)
         q_values = q_values_list[-1:]
-
-        abs_td = jnp.abs(q_targets - q_values)
-        q_loss = (jnp.square(abs_td)).mean()
-
         a_values = -q_values_list[:-1]
 
+        va_loss = self._compute_va_loss(v_values, a_values, q_targets)
+        q_loss = self._compute_q_loss(q_values, q_targets)
+
+        return va_loss + q_loss
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_va_loss(
+        self,
+        v_values: jnp.ndarray,
+        a_values: jnp.ndarray,
+        q_targets: jnp.ndarray,
+    ) -> None:
         mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
         upsilon_values = (
             1 - self.rho * mix_case
@@ -353,9 +359,14 @@ class AFU(RLAlgo):
             + (upsilon_values - q_targets) ** 2
         )
 
-        va_loss = z_values.mean()
+        return z_values.mean()
 
-        return va_loss + q_loss
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_q_loss(
+        self, q_values: jnp.ndarray, q_targets: jnp.ndarray
+    ) -> None:
+        errors = jnp.square(jnp.abs(q_targets - q_values))
+        return errors.mean()
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_policy(

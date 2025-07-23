@@ -326,13 +326,11 @@ class AFUTQC(RLAlgo):
 
         v_targets_list = self.v_network.apply(v_target_params, next_states)
         v_targets = jnp.min(v_targets_list, axis=0)
-
         q_targets = jax.lax.stop_gradient(
             rewards + self.gamma * (1.0 - dones) * v_targets
         )
 
         v_values = self.v_network.apply(v_params, states)
-
         q_values_list = self.q_network.apply(q_params, states, actions)
         q_values = q_values_list[-1:]
         a_values = -q_values_list[:-1]
