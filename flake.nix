@@ -5,6 +5,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
+
   outputs = {
     self,
     nixpkgs,
@@ -14,9 +15,7 @@
       system: let
         pkgs = import nixpkgs {
           inherit system;
-          config = {
-            allowUnfree = true;
-          };
+          config.allowUnfree = true;
         };
       in {
         devShells.default = pkgs.mkShell {
@@ -30,6 +29,10 @@
             texlive.combined.scheme-full
             mujoco
             imagemagick
+
+            cudaPackages.cudatoolkit
+            cudaPackages.cudnn
+            cudaPackages.libcusparse
           ];
 
           env = with pkgs; {
@@ -58,15 +61,11 @@
               zlib
               gfortran.cc.lib
               swig
-              cudatoolkit.lib
-              linuxPackages.nvidia_x11
             ];
             MPLBACKEND = "TkAgg";
-            CUDA_PATH = "${cudatoolkit}";
           };
 
           shellHook = ''
-            export LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/local/nvidia/lib:$LD_LIBRARY_PATH"
             uv sync --quiet --dev
             source .venv/bin/activate
           '';
