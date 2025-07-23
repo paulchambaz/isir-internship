@@ -327,13 +327,7 @@ class TQC(RLAlgo):
         z_next_targets = self.z_network.apply(
             z_target_params, next_states, next_actions
         )
-
-        batch_size = z_next_targets.shape[0]
-        all_quantiles = z_next_targets.reshape(batch_size, -1)
-        sorted_quantiles = jnp.sort(all_quantiles, axis=1)
-
-        n_kept = self.n_critics * (self.n_quantiles - self.quantiles_drop)
-        truncated_quantiles = sorted_quantiles[:, :n_kept]
+        truncated_quantiles = self._truncate(z_next_targets)
 
         alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
         z_targets = jax.lax.stop_gradient(
@@ -365,6 +359,23 @@ class TQC(RLAlgo):
         weights = jnp.abs(tau - (diff < 0))
 
         return (weights * huber_loss).mean()
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _truncate(self, quantiles: jnp.ndarray) -> jnp.ndarray:
+        batch_size = quantiles.shape[0]
+        all_quantiles = quantiles.reshape(batch_size, -1)
+        sorted_quantiles = jnp.sort(all_quantiles, axis=1)
+
+        n_drop = abs(self.quantiles_drop)
+        n_total = self.n_critics * self.n_quantiles
+        n_kept = n_total - n_drop
+
+        return jax.lax.cond(
+            self.quantiles_drop <= 0,
+            lambda x: x[:, n_drop:],
+            lambda x: x[:, :n_kept],
+            sorted_quantiles,
+        )
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_policy(

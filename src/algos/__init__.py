@@ -14,8 +14,8 @@ __author__ = "Paul Chambaz"
 
 # from .afu3 import AFU
 from .afu import AFU
-from .afu4 import AFU1A
 from .afup import AFUP
+from .afutqc import AFUTQC
 from .mlp import MLP
 from .rl_algo import RLAlgo
 from .sac import SAC
@@ -26,6 +26,7 @@ __all__ = [
     "AFU",
     "AFU1A",
     "AFUP",
+    "AFUTQC",
     "MLP",
     "SAC",
     "TQC",

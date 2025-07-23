@@ -80,9 +80,6 @@
           shellHook = ''
             uv sync --quiet --dev
             source .venv/bin/activate
-
-            echo "CUDA toolkit path: ${pkgs.cudaPackages.cudatoolkit}"
-            echo "CUDNN path: ${pkgs.cudaPackages.cudnn}"
           '';
         };
       }

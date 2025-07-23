@@ -177,7 +177,7 @@ def main() -> None:
     parser.add_argument(
         "--algo",
         type=str,
-        choices=["afu", "afup", "afu1a", "sac", "tqc"],
+        choices=["afu", "afup", "afutqc", "sac", "tqc"],
         required=True,
         help="Algorithms",
     )
@@ -267,8 +267,8 @@ def main() -> None:
                 rho=0.7,
                 seed=seed,
             )
-        case "afu1a":
-            agent = algos.AFU1A(
+        case "afutqc":
+            agent = algos.AFUTQC(
                 state_dim=state_dim,
                 action_dim=action_dim,
                 hidden_dims=hidden_dims,
