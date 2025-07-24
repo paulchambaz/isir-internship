@@ -8,7 +8,6 @@
 
 import argparse
 import gc
-import os
 import pickle
 from functools import partial
 from pathlib import Path
@@ -403,7 +402,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.cpu:
-        os.environ["JAX_PLATFORM_NAME"] = "cpu"
+        jax.config.update("jax_platform_name", "cpu")
 
     print(f"JAX devices: {jax.devices()}")
     print(f"JAX default device: {jax.devices()[0]}")
