@@ -367,6 +367,8 @@ def get_figure(i: int, state: dict) -> None:
         replay_positions, replay_velocities
     )
 
+    del agent
+
     create_figure(
         i,
         v_values,
@@ -401,7 +403,6 @@ def main() -> None:
     if args.cpu:
         os.environ["JAX_PLATFORM_NAME"] = "cpu"
 
-    # checkpoint_files = ["outputs/agent_history_19.pk"]
     checkpoint_files = sorted(Path(args.dir).glob("agent_history_*.pk"))
     total_states = len(checkpoint_files) * 100
 
@@ -416,6 +417,7 @@ def main() -> None:
                 pbar.update(1)
 
             del partial_history
+            jax.clear_caches()
             gc.collect()
 
 
