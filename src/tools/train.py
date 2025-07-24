@@ -14,6 +14,7 @@ import pickle
 from pathlib import Path
 
 import gymnasium as gym
+import jax
 import numpy as np
 from tqdm import tqdm
 
