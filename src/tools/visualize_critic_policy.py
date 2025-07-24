@@ -52,6 +52,8 @@ def measure_trajectories(
 
     env.close()
 
+    # TODO: difference between mountaincar and pendulum
+    # TODO: we should have a clean helper function that does that cleanly
     state_steps = zip(*trajectories, strict=False)
     filtered_steps = [
         [
@@ -402,6 +404,10 @@ def main() -> None:
 
     if args.cpu:
         os.environ["JAX_PLATFORM_NAME"] = "cpu"
+
+    print(f"JAX devices: {jax.devices()}")
+    print(f"JAX default device: {jax.devices()[0]}")
+    print(f"JAX using: {jax.devices()[0].device_kind}")
 
     checkpoint_files = sorted(Path(args.dir).glob("agent_history_*.pk"))
     total_states = len(checkpoint_files) * 100
