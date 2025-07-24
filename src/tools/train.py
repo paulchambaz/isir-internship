@@ -10,7 +10,6 @@
 import argparse
 import copy
 import gc
-import os
 import pickle
 from pathlib import Path
 
@@ -209,7 +208,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.cpu:
-        os.environ["JAX_PLATFORM_NAME"] = "cpu"
+        jax.config.update("jax_platform_name", "cpu")
 
     env_name = envs[args.env]
     train_env = gym.make(env_name)

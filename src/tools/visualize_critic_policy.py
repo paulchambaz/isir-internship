@@ -404,10 +404,6 @@ def main() -> None:
     if args.cpu:
         jax.config.update("jax_platform_name", "cpu")
 
-    print(f"JAX devices: {jax.devices()}")
-    print(f"JAX default device: {jax.devices()[0]}")
-    print(f"JAX using: {jax.devices()[0].device_kind}")
-
     checkpoint_files = sorted(Path(args.dir).glob("agent_history_*.pk"))
     total_states = len(checkpoint_files) * 100
 
