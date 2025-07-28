@@ -183,10 +183,13 @@ class AvgEnsemble:
         return new_params, new_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
-    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
+    def _call(self, params_list: dict, actions: jnp.ndarray) -> jnp.ndarray:
         return jnp.stack(
-            [self.network.apply(params, actions) for params in self.params_list]
+            [self.network.apply(params, actions) for params in params_list]
         ).mean(axis=0)
+
+    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
+        return self._call(self.params_list, actions)
 
 
 class MinEnsemble:
@@ -255,10 +258,13 @@ class MinEnsemble:
         return new_params, new_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
-    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
+    def _call(self, params_list: dict, actions: jnp.ndarray) -> jnp.ndarray:
         return jnp.stack(
-            [self.network.apply(params, actions) for params in self.params_list]
+            [self.network.apply(params, actions) for params in params_list]
         ).min(axis=0)
+
+    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
+        return self._call(self.params_list, actions)
 
 
 class TqcEnsemble:
@@ -371,13 +377,16 @@ class TqcEnsemble:
         return new_params, new_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
-    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
-        quantiles = self.network.apply(self.params, actions)
+    def _call(self, params: dict, actions: jnp.ndarray) -> jnp.ndarray:
+        quantiles = self.network.apply(params, actions)
         union_quantiles = quantiles.reshape(actions.shape[0], -1)
         sorted_quantiles = jnp.sort(union_quantiles, axis=-1)
         truncated = sorted_quantiles[:, : self.total_kept]
 
         return jnp.mean(truncated, axis=-1)
+
+    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
+        return self._call(self.params, actions)
 
 
 def create_avg(n: int, gamma: float, key: jnp.ndarray) -> AvgEnsemble:
@@ -498,7 +507,7 @@ def main() -> None:
             buffer_size=50,
             total_steps=10000,
             eval_freq=100,
-            num_seed=20,
+            num_seed=10,
             create_ensemble_fn=create_ensemble_fn,
         )
 
