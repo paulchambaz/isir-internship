@@ -69,6 +69,7 @@ class MLP(nn.Module):
                     kernel_init=jax.nn.initializers.variance_scaling(
                         scale=1 / 3, mode="fan_in", distribution="uniform"
                     ),
+                    bias_init=jax.nn.initializers.constant(0.01),
                 )(x)
             )
         return nn.Dense(
@@ -76,6 +77,7 @@ class MLP(nn.Module):
             kernel_init=jax.nn.initializers.variance_scaling(
                 scale=1 / 3, mode="fan_in", distribution="uniform"
             ),
+            bias_init=jax.nn.initializers.zeros,
         )(x)
 
 
@@ -656,12 +658,12 @@ def main() -> None:
 
     experiments = list(
         itertools.chain(
-            # [("avg", n, create_avg) for n in avg_data],
-            # [("min", n, create_min_ensemble) for n in min_data],
+            [("avg", n, create_avg) for n in avg_data],
+            [("min", n, create_min_ensemble) for n in min_data],
             # [("tqc", n, create_tqc_ensemble) for n in tqc_data],
             # [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
-            [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
-            [("top", beta, create_top_ensemble) for beta in top_data],
+            # [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
+            # [("top", beta, create_top_ensemble) for beta in top_data],
         )
     )
 
@@ -685,8 +687,8 @@ def main() -> None:
             mdp=mdp,
             buffer_size=50,
             total_steps=20000,
-            eval_freq=100,
-            num_seed=50,
+            eval_freq=1000,
+            num_seed=1,
             create_ensemble_fn=create_ensemble_fn,
         )
 

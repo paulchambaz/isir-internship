@@ -316,49 +316,46 @@ class TQC(RLAlgo):
         Compute Z-network loss using quantile regression with truncated targets.
         """
 
+        z_targets = self._compute_z_targets(
+            z_target_params,
+            policy_params,
+            log_alpha,
+            rewards,
+            next_states,
+            dones,
+            key,
+        )
+        z_values = self.z_network.apply(z_params, states, actions)
+
+        return self._quantile_regression_loss(z_values, z_targets)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_z_targets(
+        self,
+        z_target_params: dict[str, any],
+        policy_params: dict[str, any],
+        log_alpha: jnp.ndarray,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
+        key: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute truncated quantile targets."""
         next_actions, next_log_probs = self._compute_action_and_log_prob(
             policy_params, next_states, key
         )
 
-        rewards = rewards.reshape(-1, 1)
-        dones = dones.reshape(-1, 1)
-        next_log_probs = next_log_probs.reshape(-1, 1)
-
-        z_next_targets = self.z_network.apply(
+        z_next_values = self.z_network.apply(
             z_target_params, next_states, next_actions
         )
-        truncated_quantiles = self._truncate(z_next_targets)
+        truncated_quantiles = self._truncate(z_next_values)
 
         alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
-        z_targets = jax.lax.stop_gradient(
-            rewards
-            + self.gamma
-            * (1.0 - dones)
-            * (truncated_quantiles - alpha * next_log_probs)
-        )
+        targets = rewards.reshape(-1, 1) + self.gamma * (
+            1.0 - dones.reshape(-1, 1)
+        ) * (truncated_quantiles - alpha * next_log_probs)
 
-        z_values = self.z_network.apply(z_params, states, actions)
-
-        tau = jnp.linspace(
-            1 / (2 * self.n_quantiles),
-            1 - 1 / (2 * self.n_quantiles),
-            self.n_quantiles,
-        )
-
-        z_values = jnp.expand_dims(z_values, axis=-1)
-        z_targets = jnp.expand_dims(z_targets, axis=(1, 2))
-        tau = jnp.expand_dims(tau, axis=(0, 1, 3))
-
-        diff = z_targets - z_values
-        abs_diff = jnp.abs(diff)
-
-        huber_loss = jnp.where(
-            abs_diff <= 1.0, 0.5 * jnp.square(diff), abs_diff - 0.5
-        )
-
-        weights = jnp.abs(tau - (diff < 0))
-
-        return (weights * huber_loss).mean()
+        return jax.lax.stop_gradient(targets)
 
     @partial(jax.jit, static_argnums=(0,))
     def _truncate(self, quantiles: jnp.ndarray) -> jnp.ndarray:
@@ -375,6 +372,42 @@ class TQC(RLAlgo):
             lambda x: x[:, n_drop:],
             lambda x: x[:, :n_kept],
             sorted_quantiles,
+        )
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _quantile_regression_loss(
+        self, z_values: jnp.ndarray, z_targets: jnp.ndarray
+    ) -> jnp.ndarray:
+        """Compute quantile regression with Huber loss."""
+        tau = jnp.linspace(
+            1 / (2 * self.n_quantiles),
+            1 - 1 / (2 * self.n_quantiles),
+            self.n_quantiles,
+        )
+
+        z_values_expanded = jnp.expand_dims(z_values, axis=-1)
+        z_targets_expanded = jnp.expand_dims(z_targets, axis=(1, 2))
+        tau_expanded = jnp.expand_dims(tau, axis=(0, 1, 3))
+
+        diff = z_targets_expanded - z_values_expanded
+        huber_loss = self._huber_loss(diff, delta=1.0)
+        weights = jnp.abs(tau_expanded - (diff < 0))
+
+        loss_per_quantile = (weights * huber_loss).sum(axis=-1)
+
+        normalization = self.n_quantiles * z_targets.shape[-1]
+
+        return loss_per_quantile.mean() / normalization
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _huber_loss(self, errors: jnp.ndarray, delta: float) -> jnp.ndarray:
+        """Compute Huber loss."""
+        abs_errors = jnp.abs(errors)
+
+        return jnp.where(
+            abs_errors <= delta,
+            0.5 * jnp.square(errors),
+            delta * abs_errors - 0.5 * delta**2,
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -476,6 +509,7 @@ class TQC(RLAlgo):
 
         noise = random.normal(key, means.shape)
         raw_actions = means + noise * jnp.exp(log_stds)
+
         actions = jnp.tanh(raw_actions)
 
         gaussian_log_probs = -0.5 * (

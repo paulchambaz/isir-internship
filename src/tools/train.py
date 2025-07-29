@@ -314,7 +314,7 @@ def main() -> None:
                 alpha=alpha,
                 n_quantiles=25,
                 n_critics=3,
-                quantiles_drop=2,
+                quantiles_drop=-2,
                 seed=seed,
             )
         case _:
@@ -330,7 +330,7 @@ def main() -> None:
         warmup=10000,
         train_freq=4,
         gradient_steps=4,
-        test_freq=50,
+        test_freq=500,
         count=args.runs,
     )
 

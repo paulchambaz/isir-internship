@@ -37,7 +37,7 @@ def main() -> None:
     # print(all_steps)
 
     for step in tqdm(all_steps):
-        if step != 0000:
+        if step % 1000 == 0:
             fig, ax = plt.subplots(figsize=(12, 6))
 
             ax.set_xscale("symlog", linthresh=1)
