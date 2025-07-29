@@ -659,9 +659,9 @@ def main() -> None:
             # [("avg", n, create_avg) for n in avg_data],
             # [("min", n, create_min_ensemble) for n in min_data],
             # [("tqc", n, create_tqc_ensemble) for n in tqc_data],
-            [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
-            # [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
-            # [("top", beta, create_top_ensemble) for beta in top_data],
+            # [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
+            [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
+            [("top", beta, create_top_ensemble) for beta in top_data],
         )
     )
 
