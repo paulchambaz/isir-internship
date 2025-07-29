@@ -23,16 +23,6 @@ from tqdm import tqdm
 
 
 class ToyMdp:
-    __slots__ = [
-        "a0",
-        "a1",
-        "gamma",
-        "nu",
-        "optimal_action",
-        "optimal_reward",
-        "sigma",
-    ]
-
     def __init__(
         self, gamma: float, sigma: float, a0: float, a1: float, nu: float
     ) -> None:
@@ -42,7 +32,7 @@ class ToyMdp:
         self.a1 = a1
         self.nu = nu
 
-        actions = np.linspace(-1, 1, 10000)
+        actions = np.linspace(-1, 1, 1000000)
         rewards = self._mean_reward(self.a0, self.a1, self.nu, actions)
         self.optimal_action = actions[np.argmax(rewards)]
         self.optimal_reward = np.max(rewards)
@@ -63,7 +53,7 @@ class ToyMdp:
     def _mean_reward(
         a0: float, a1: float, nu: float, actions: np.ndarray
     ) -> np.ndarray:
-        return a0 + (a1 - a0) / 2 * (actions + 1) * np.sin(nu * actions)
+        return (a0 + (a1 - a0) / 2 * (actions + 1)) * np.sin(nu * actions)
 
 
 class MLP(nn.Module):
@@ -666,10 +656,10 @@ def main() -> None:
 
     experiments = list(
         itertools.chain(
-            # [("avg", n, create_avg) for n in avg_data],
-            # [("min", n, create_min_ensemble) for n in min_data],
+            [("avg", n, create_avg) for n in avg_data],
+            [("min", n, create_min_ensemble) for n in min_data],
             # [("tqc", n, create_tqc_ensemble) for n in tqc_data],
-            [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
+            # [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
             # [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
             # [("top", beta, create_top_ensemble) for beta in top_data],
         )
@@ -696,7 +686,7 @@ def main() -> None:
             buffer_size=50,
             total_steps=20000,
             eval_freq=100,
-            num_seed=100,
+            num_seed=50,
             create_ensemble_fn=create_ensemble_fn,
         )
 

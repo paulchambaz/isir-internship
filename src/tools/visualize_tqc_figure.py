@@ -57,7 +57,7 @@ def main() -> None:
             ax.set_title(f"Training step: {step}", fontsize=24, pad=20)
 
             ax.set_ylim(1e-3, 1e5)
-            ax.set_xlim(-1e7, 1e5)
+            ax.set_xlim(-1e3, 1e5)
 
             points = {
                 "avg": {"color": "#5591e1"},
@@ -71,12 +71,15 @@ def main() -> None:
             for (method, n), step_data in results.items():
                 bias, variance, _ = step_data[step]
 
+                # if method == "avg" and n != 1:
+                #     continue
+
                 points[method].setdefault("x", []).append(bias)
                 points[method].setdefault("y", []).append(variance)
                 points[method].setdefault("numbers", []).append(str(n))
 
             for key, data in points.items():
-                if key not in ["avg"]:
+                if key not in ["avg", "min"]:
                     continue
 
                 if "x" not in data:
@@ -106,46 +109,46 @@ def main() -> None:
                     )
 
             legend_elements = [
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    markerfacecolor="#c77c1e",
-                    markersize=18,
-                    alpha=0.7,
-                    label=r"TOP N=2 M=25 ($\beta$ coefficient)",
-                ),
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    markerfacecolor="#a19101",
-                    markersize=18,
-                    alpha=0.7,
-                    label=r"ND-TOP N=2 ($\beta$ coefficient)",
-                ),
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    markerfacecolor="#39a985",
-                    markersize=18,
-                    alpha=0.7,
-                    label="TQC N=1 M=25 (d dropped quantiles)",
-                ),
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    markerfacecolor="#6ca247",
-                    markersize=18,
-                    alpha=0.7,
-                    label="TQC N=2 M=25 (d dropped quantiles)",
-                ),
+                # Line2D(
+                #     [0],
+                #     [0],
+                #     marker="o",
+                #     color="w",
+                #     markerfacecolor="#c77c1e",
+                #     markersize=18,
+                #     alpha=0.7,
+                #     label=r"TOP N=2 M=25 ($\beta$ coefficient)",
+                # ),
+                # Line2D(
+                #     [0],
+                #     [0],
+                #     marker="o",
+                #     color="w",
+                #     markerfacecolor="#a19101",
+                #     markersize=18,
+                #     alpha=0.7,
+                #     label=r"ND-TOP N=2 ($\beta$ coefficient)",
+                # ),
+                # Line2D(
+                #     [0],
+                #     [0],
+                #     marker="o",
+                #     color="w",
+                #     markerfacecolor="#39a985",
+                #     markersize=18,
+                #     alpha=0.7,
+                #     label="TQC N=1 M=25 (d dropped quantiles)",
+                # ),
+                # Line2D(
+                #     [0],
+                #     [0],
+                #     marker="o",
+                #     color="w",
+                #     markerfacecolor="#6ca247",
+                #     markersize=18,
+                #     alpha=0.7,
+                #     label="TQC N=2 M=25 (d dropped quantiles)",
+                # ),
                 Line2D(
                     [0],
                     [0],
@@ -182,12 +185,12 @@ def main() -> None:
 
             plt.tight_layout()
 
-            # plt.show()
-            plt.savefig(
-                f"paper/figures/tqc_figure/step_{step:05d}.svg",
-                bbox_inches="tight",
-                dpi=150,
-            )
+            plt.show()
+            # plt.savefig(
+            #     f"paper/figures/tqc_figure/step_{step:05d}.svg",
+            #     bbox_inches="tight",
+            #     dpi=150,
+            # )
             plt.close()
 
 
