@@ -6,26 +6,21 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
+import jax
+import jax.numpy as jnp
 
-import torch
-from torch import nn
+
+@jax.jit
+def square_error_loss(values: jnp.ndarray, targets: jnp.ndarray) -> jnp.ndarray:
+    return jnp.square(values - targets)
 
 
-def soft_update_target(
-    target_net: nn.Module, source_net: nn.Module, tau: float
-) -> None:
-    """
-    Performs soft update on a target network from a source network.
-
-    Args:
-        target_net: Target network to update
-        source_net: Source network to copy from
-        tau: Soft update coefficient (0 < tau <= 1)
-    """
-    with torch.no_grad():
-        for target_param, source_param in zip(
-            target_net.parameters(), source_net.parameters(), strict=True
-        ):
-            target_param.data.copy_(
-                (1.0 - tau) * target_param.data + tau * source_param.data
-            )
+@jax.jit
+def soft_update(
+    target_params: dict[str, any],
+    online_params: dict[str, any],
+    tau: float,
+) -> dict[str, any]:
+    return jax.tree.map(
+        lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
+    )

@@ -427,7 +427,8 @@ class TQC(RLAlgo):
 
         normalization = self.n_quantiles * z_targets.shape[-1]
 
-        return loss_per_quantile.mean() / normalization
+        errors = loss_per_quantile / normalization
+        return errors.mean()
 
     @partial(jax.jit, static_argnums=(0,))
     def _huber_loss(self, errors: jnp.ndarray, delta: float) -> jnp.ndarray:

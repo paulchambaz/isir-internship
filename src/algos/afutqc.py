@@ -19,6 +19,7 @@ from jax import random
 from .mlp import MLP
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
+from .utils import soft_update, square_error_loss
 
 
 class AFUTQC(RLAlgo):
@@ -91,8 +92,6 @@ class AFUTQC(RLAlgo):
         gamma: float,
         alpha: float | None,
         rho: float,
-        n_quantiles: int,
-        quantiles_drop: int,
         seed: int,
         state: dict[str, any] | None = None,
     ) -> None:
@@ -105,8 +104,8 @@ class AFUTQC(RLAlgo):
         self.rho = rho
         self.gamma = gamma
         self.target_entropy = -float(action_dim)
-        self.n_quantiles = n_quantiles
-        self.quantiles_drop = quantiles_drop
+        # self.n_quantiles = n_quantiles
+        # self.quantiles_drop = quantiles_drop
 
         # self.q_network = self.QNetwork(
         #     hidden_dims=hidden_dims,
@@ -275,10 +274,10 @@ class AFUTQC(RLAlgo):
                 )
             )
 
-        self.v_target_params = self._soft_update(
+        self.v_target_params = soft_update(
             self.v_target_params, self.v_params, self.tau
         )
-        self.q_target_params = self._soft_update(
+        self.q_target_params = soft_update(
             self.q_target_params, self.q_params, self.tau
         )
 
@@ -304,9 +303,7 @@ class AFUTQC(RLAlgo):
     ]:
         """Update Q and V network parameters using computed gradients."""
 
-        (q_grad, v_grad) = jax.grad(
-            self._compute_critic_loss, argnums=(0, 1), has_aux=False
-        )(
+        (q_grad, v_grad) = jax.grad(self._compute_critic_loss, argnums=(0, 1))(
             q_params,
             v_params,
             q_target_params,
@@ -345,10 +342,10 @@ class AFUTQC(RLAlgo):
     ) -> jnp.ndarray:
         """Compute combined loss for Q and V networks with V-A constraints."""
 
-        v_values = self.v_network.apply(v_params, states)
         q_values_list = self.q_network.apply(q_params, states, actions)
         q_values = q_values_list[-1:]
         a_values = -q_values_list[:-1]
+        v_values = self.v_network.apply(v_params, states)
 
         q_loss = self._compute_q_loss(
             v_target_params, q_values, rewards, next_states, dones
@@ -369,19 +366,24 @@ class AFUTQC(RLAlgo):
         states: jnp.ndarray,
         actions: jnp.ndarray,
     ) -> None:
-        q_targets_list = self.q_network(q_target_params, states, actions)
+        q_targets_list = self.q_network.apply(q_target_params, states, actions)
         q_targets = jax.lax.stop_gradient(q_targets_list[-1:])
 
-        mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
-        upsilon_values = (
-            1 - self.rho * mix_case
-        ) * v_values + self.rho * mix_case * jax.lax.stop_gradient(v_values)
+        upsilon_values = jax.lax.cond(
+            jax.lax.stop_gradient(v_values + a_values < q_targets),
+            lambda: (1 - self.rho) * v_values
+            + self.rho * jax.lax.stop_gradient(v_values),
+            lambda: v_values,
+        )
 
-        up_case = jax.lax.stop_gradient(v_values >= q_targets)
-        z_values = (
-            a_values**2
-            + up_case * 2 * a_values * (upsilon_values - q_targets)
-            + (upsilon_values - q_targets) ** 2
+        z_values = jax.lax.cond(
+            jax.lax.stop_gradient(v_values < q_targets),
+            lambda: square_error_loss(values=a_values, targets=0)
+            + square_error_loss(values=upsilon_values, targets=q_targets),
+            lambda: square_error_loss(
+                values=a_values + upsilon_values, targets=q_targets
+            )
+            ** 2,
         )
 
         return z_values.mean()
@@ -401,7 +403,7 @@ class AFUTQC(RLAlgo):
             rewards + self.gamma * (1.0 - dones) * v_next_targets
         )
 
-        errors = jnp.square(jnp.abs(q_targets - q_values))
+        errors = square_error_loss(values=q_values, targets=q_targets)
         return errors.mean()
 
     @partial(jax.jit, static_argnums=(0,))
@@ -503,19 +505,6 @@ class AFUTQC(RLAlgo):
         """Compute temperature loss for automatic entropy tuning."""
 
         return -log_alpha * (self.target_entropy + mean_log_probs)
-
-    @partial(jax.jit, static_argnums=(0,))
-    def _soft_update(
-        self,
-        target_params: dict[str, any],
-        online_params: dict[str, any],
-        tau: float,
-    ) -> dict[str, any]:
-        """Perform soft update of target network parameters."""
-
-        return jax.tree.map(
-            lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
-        )
 
     def get_state(self) -> dict[str, any]:
         """

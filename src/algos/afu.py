@@ -19,6 +19,7 @@ from jax import random
 from .mlp import MLP
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
+from .utils import soft_update, square_error_loss
 
 
 class AFU(RLAlgo):
@@ -260,7 +261,7 @@ class AFU(RLAlgo):
                 )
             )
 
-        self.v_target_params = self._soft_update(
+        self.v_target_params = soft_update(
             self.v_target_params, self.v_params, self.tau
         )
 
@@ -347,16 +348,48 @@ class AFU(RLAlgo):
         a_values: jnp.ndarray,
         q_targets: jnp.ndarray,
     ) -> None:
+        # upsilon_values = jax.lax.cond(
+        #     jax.lax.stop_gradient(v_values + a_values < q_targets),
+        #     lambda: (1 - self.rho) * v_values
+        #     + self.rho * jax.lax.stop_gradient(v_values),
+        #     lambda: v_values,
+        # )
+        #
+        # z_values = jax.lax.cond(
+        #     jax.lax.stop_gradient(v_values < q_targets),
+        #     lambda: a_values**2 + (upsilon_values - q_targets) ** 2,
+        #     lambda: (a_values + (upsilon_values - q_targets)) ** 2,
+        # )
+
         mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
+
+        # upsilon_values = jax.numpy.where(
+        #     mix_case,
+        #     v_values,
+        #     (1 - self.rho) * v_values
+        #     + self.rho * jax.lax.stop_gradient(v_values),
+        # )
+
         upsilon_values = (
             1 - self.rho * mix_case
         ) * v_values + self.rho * mix_case * jax.lax.stop_gradient(v_values)
 
         up_case = jax.lax.stop_gradient(v_values >= q_targets)
-        z_values = (
-            a_values**2
-            + up_case * 2 * a_values * (upsilon_values - q_targets)
-            + (upsilon_values - q_targets) ** 2
+
+        # z_values = jax.lax.select(
+        #     up_case,
+        #     square_error_loss(values=upsilon_values, targets=q_targets)
+        #     + square_error_loss(values=a_values, targets=0),
+        #     square_error_loss(
+        #         values=a_values + upsilon_values, targets=q_targets
+        #     ),
+        # )
+
+        z_values = (1 - up_case) * (
+            square_error_loss(values=upsilon_values, targets=q_targets)
+            + square_error_loss(values=a_values, targets=0)
+        ) + up_case * square_error_loss(
+            values=a_values + upsilon_values, targets=q_targets
         )
 
         return z_values.mean()
@@ -467,19 +500,6 @@ class AFU(RLAlgo):
         """Compute temperature loss for automatic entropy tuning."""
 
         return -log_alpha * (self.target_entropy + mean_log_probs)
-
-    @partial(jax.jit, static_argnums=(0,))
-    def _soft_update(
-        self,
-        target_params: dict[str, any],
-        online_params: dict[str, any],
-        tau: float,
-    ) -> dict[str, any]:
-        """Perform soft update of target network parameters."""
-
-        return jax.tree.map(
-            lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
-        )
 
     def get_state(self) -> dict[str, any]:
         """

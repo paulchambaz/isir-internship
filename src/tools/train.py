@@ -80,6 +80,7 @@ def train(
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
                     progress.set_postfix({"eval": get_stats(results)})
+                    print(get_stats(results))
                     agent_history[result_id] = copy.deepcopy(agent.get_state())
 
                     if result_id % 100 == 0:
