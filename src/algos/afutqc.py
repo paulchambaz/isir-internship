@@ -91,6 +91,8 @@ class AFUTQC(RLAlgo):
         gamma: float,
         alpha: float | None,
         rho: float,
+        n_quantiles: int,
+        quantiles_drop: int,
         seed: int,
         state: dict[str, any] | None = None,
     ) -> None:
@@ -103,8 +105,19 @@ class AFUTQC(RLAlgo):
         self.rho = rho
         self.gamma = gamma
         self.target_entropy = -float(action_dim)
+        self.n_quantiles = n_quantiles
+        self.quantiles_drop = quantiles_drop
 
-        self.q_network = self.QNetwork(hidden_dims=hidden_dims, num_critics=3)
+        # self.q_network = self.QNetwork(
+        #     hidden_dims=hidden_dims,
+        #     num_critics=1,
+        #     output_dim=self.n_quantiles + 1,
+        # )
+        self.q_network = self.QNetwork(
+            hidden_dims=hidden_dims,
+            num_critics=3,
+            output_dim=1,
+        )
         self.v_network = self.VNetwork(hidden_dims=hidden_dims, num_critics=2)
         self.policy_network = self.PolicyNetwork(
             hidden_dims=hidden_dims, action_dim=action_dim
@@ -116,6 +129,7 @@ class AFUTQC(RLAlgo):
         dummy_action = jnp.zeros((1, action_dim))
 
         self.q_params = self.q_network.init(q_key, dummy_state, dummy_action)
+        self.q_target_params = self.q_params
         self.v_params = self.v_network.init(v_key, dummy_state)
         self.v_target_params = self.v_params
         self.policy_params = self.policy_network.init(policy_key, dummy_state)
@@ -225,43 +239,47 @@ class AFUTQC(RLAlgo):
 
         self.q_params, self.v_params, self.q_opt_state, self.v_opt_state = (
             self._update_critic_and_value(
-                self.q_params,
-                self.v_params,
-                self.q_opt_state,
-                self.v_opt_state,
-                self.v_target_params,
-                states,
-                actions,
-                rewards,
-                next_states,
-                dones,
+                q_params=self.q_params,
+                v_params=self.v_params,
+                q_opt_state=self.q_opt_state,
+                v_opt_state=self.v_opt_state,
+                q_target_params=self.q_target_params,
+                v_target_params=self.v_target_params,
+                states=states,
+                actions=actions,
+                rewards=rewards,
+                next_states=next_states,
+                dones=dones,
             )
         )
 
         self.key, policy_key = random.split(self.key)
         self.policy_params, self.policy_opt_state, mean_log_probs = (
             self._update_policy(
-                self.policy_params,
-                self.policy_opt_state,
-                self.q_params,
-                self.v_params,
-                self.log_alpha,
-                states,
-                policy_key,
+                policy_params=self.policy_params,
+                policy_opt_state=self.policy_opt_state,
+                q_params=self.q_params,
+                v_params=self.v_params,
+                log_alpha=self.log_alpha,
+                states=states,
+                key=policy_key,
             )
         )
 
         if self.learn_temperature:
             self.log_alpha, self.temperature_opt_state = (
                 self._update_temperature(
-                    self.log_alpha,
-                    self.temperature_opt_state,
-                    mean_log_probs,
+                    log_alpha=self.log_alpha,
+                    temperature_opt_state=self.temperature_opt_state,
+                    mean_log_probs=mean_log_probs,
                 )
             )
 
         self.v_target_params = self._soft_update(
             self.v_target_params, self.v_params, self.tau
+        )
+        self.q_target_params = self._soft_update(
+            self.q_target_params, self.q_params, self.tau
         )
 
     @partial(jax.jit, static_argnums=(0,))
@@ -271,6 +289,7 @@ class AFUTQC(RLAlgo):
         v_params: dict[str, jax.Array],
         q_opt_state: optax.OptState,
         v_opt_state: optax.OptState,
+        q_target_params: dict[str, jax.Array],
         v_target_params: dict[str, jax.Array],
         states: jnp.ndarray,
         actions: jnp.ndarray,
@@ -288,8 +307,9 @@ class AFUTQC(RLAlgo):
         (q_grad, v_grad) = jax.grad(
             self._compute_critic_loss, argnums=(0, 1), has_aux=False
         )(
-            q_params,
-            v_params,
+            q_params=q_params,
+            v_params=v_params,
+            q_target_params=q_target_params,
             v_target_params=v_target_params,
             states=states,
             actions=actions,
@@ -315,6 +335,7 @@ class AFUTQC(RLAlgo):
         self,
         q_params: dict[str, any],
         v_params: dict[str, any],
+        q_target_params: dict[str, any],
         v_target_params: dict[str, any],
         states: np.ndarray,
         actions: np.ndarray,
@@ -324,29 +345,37 @@ class AFUTQC(RLAlgo):
     ) -> jnp.ndarray:
         """Compute combined loss for Q and V networks with V-A constraints."""
 
-        v_targets_list = self.v_network.apply(v_target_params, next_states)
-        v_targets = jnp.min(v_targets_list, axis=0)
-        q_targets = jax.lax.stop_gradient(
-            rewards + self.gamma * (1.0 - dones) * v_targets
-        )
-
         v_values = self.v_network.apply(v_params, states)
         q_values_list = self.q_network.apply(q_params, states, actions)
         q_values = q_values_list[-1:]
         a_values = -q_values_list[:-1]
 
-        va_loss = self._compute_va_loss(v_values, a_values, q_targets)
-        q_loss = self._compute_q_loss(q_values, q_targets)
+        va_loss = self._compute_va_loss(
+            v_target_params, v_values, a_values, rewards, next_states, dones
+        )
+
+        q_loss = self._compute_q_loss(
+            q_target_params, q_values, states, actions
+        )
 
         return va_loss + q_loss
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_va_loss(
         self,
+        v_target_params: dict[str, any],
         v_values: jnp.ndarray,
         a_values: jnp.ndarray,
-        q_targets: jnp.ndarray,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
     ) -> None:
+        v_next_targets_list = self.v_network.apply(v_target_params, next_states)
+        v_next_targets = jnp.min(v_next_targets_list, axis=0)
+        q_targets = jax.lax.stop_gradient(
+            rewards + self.gamma * (1.0 - dones) * v_next_targets
+        )
+
         mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
         upsilon_values = (
             1 - self.rho * mix_case
@@ -363,8 +392,15 @@ class AFUTQC(RLAlgo):
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_q_loss(
-        self, q_values: jnp.ndarray, q_targets: jnp.ndarray
+        self,
+        q_target_params: dict[str, any],
+        q_values: jnp.ndarray,
+        states: jnp.ndarray,
+        actions: jnp.ndarray,
     ) -> None:
+        q_targets_list = self.q_network(q_target_params, states, actions)
+        q_targets = jax.lax.stop_gradient(q_targets_list[-1:])
+
         errors = jnp.square(jnp.abs(q_targets - q_values))
         return errors.mean()
 
@@ -535,6 +571,7 @@ class AFUTQC(RLAlgo):
 
         hidden_dims: list[int]
         num_critics: int
+        output_dim: int
 
         @nn.compact
         def __call__(
@@ -543,9 +580,9 @@ class AFUTQC(RLAlgo):
             states_actions = jnp.concatenate([states, actions], axis=1)
             return jnp.asarray(
                 [
-                    MLP(hidden_dims=self.hidden_dims, output_dim=1)(
-                        states_actions
-                    )
+                    MLP(
+                        hidden_dims=self.hidden_dims, output_dim=self.output_dim
+                    )(states_actions)
                     for _ in range(self.num_critics)
                 ]
             )

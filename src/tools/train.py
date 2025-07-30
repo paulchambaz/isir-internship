@@ -234,6 +234,10 @@ def main() -> None:
     gamma = 0.99
     alpha = None
     seed = 42
+    rho = 0.7
+    n_critics = 3
+    n_quantiles = 25
+    quantiles_drop = -2
 
     match args.algo:
         case "sac":
@@ -264,7 +268,7 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
-                rho=0.7,
+                rho=rho,
                 seed=seed,
             )
         case "afutqc":
@@ -280,7 +284,9 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
-                rho=0.7,
+                rho=rho,
+                n_quantiles=n_quantiles,
+                quantiles_drop=quantiles_drop,
                 seed=seed,
             )
         case "afup":
@@ -296,7 +302,7 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
-                rho=0.7,
+                rho=rho,
                 seed=seed,
             )
         case "tqc":
@@ -312,9 +318,9 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
-                n_quantiles=25,
-                n_critics=3,
-                quantiles_drop=-2,
+                n_quantiles=n_quantiles,
+                n_critics=n_critics,
+                quantiles_drop=quantiles_drop,
                 seed=seed,
             )
         case _:
