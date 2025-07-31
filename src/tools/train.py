@@ -80,7 +80,7 @@ def train(
                     result_id = training_steps // test_freq
                     history.setdefault(result_id, []).extend(results)
                     progress.set_postfix({"eval": get_stats(results)})
-                    print(get_stats(results))
+                    # print(get_stats(results))
                     agent_history[result_id] = copy.deepcopy(agent.get_state())
 
                     if result_id % 100 == 0:
@@ -287,6 +287,7 @@ def main() -> None:
                 alpha=alpha,
                 rho=rho,
                 n_quantiles=n_quantiles,
+                n_critics=n_critics,
                 quantiles_drop=quantiles_drop,
                 seed=seed,
             )
@@ -334,7 +335,7 @@ def main() -> None:
         train_env=train_env,
         test_env=test_env,
         steps=args.steps,
-        warmup=10000,
+        warmup=10_000,
         train_freq=4,
         gradient_steps=4,
         test_freq=500,

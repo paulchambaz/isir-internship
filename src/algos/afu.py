@@ -19,7 +19,7 @@ from jax import random
 from .mlp import MLP
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
-from .utils import soft_update, square_error_loss
+from .utils import lerp, se_loss, soft_update, where
 
 
 class AFU(RLAlgo):
@@ -348,48 +348,25 @@ class AFU(RLAlgo):
         a_values: jnp.ndarray,
         q_targets: jnp.ndarray,
     ) -> None:
-        # upsilon_values = jax.lax.cond(
-        #     jax.lax.stop_gradient(v_values + a_values < q_targets),
-        #     lambda: (1 - self.rho) * v_values
-        #     + self.rho * jax.lax.stop_gradient(v_values),
-        #     lambda: v_values,
-        # )
-        #
-        # z_values = jax.lax.cond(
-        #     jax.lax.stop_gradient(v_values < q_targets),
-        #     lambda: a_values**2 + (upsilon_values - q_targets) ** 2,
-        #     lambda: (a_values + (upsilon_values - q_targets)) ** 2,
-        # )
+        # applies downward pressure to value gradient
+        upsilon_values = where(
+            jax.lax.stop_gradient(v_values + a_values < q_targets),
+            # if value is under the target apply the full gradient
+            v_values,
+            # if value is over the target apply a reduced gradient
+            lerp(self.rho, v_values, jax.lax.stop_gradient(v_values)),
+        )
 
-        mix_case = jax.lax.stop_gradient(v_values + a_values < q_targets)
-
-        # upsilon_values = jax.numpy.where(
-        #     mix_case,
-        #     v_values,
-        #     (1 - self.rho) * v_values
-        #     + self.rho * jax.lax.stop_gradient(v_values),
-        # )
-
-        upsilon_values = (
-            1 - self.rho * mix_case
-        ) * v_values + self.rho * mix_case * jax.lax.stop_gradient(v_values)
-
-        up_case = jax.lax.stop_gradient(v_values >= q_targets)
-
-        # z_values = jax.lax.select(
-        #     up_case,
-        #     square_error_loss(values=upsilon_values, targets=q_targets)
-        #     + square_error_loss(values=a_values, targets=0),
-        #     square_error_loss(
-        #         values=a_values + upsilon_values, targets=q_targets
-        #     ),
-        # )
-
-        z_values = (1 - up_case) * (
-            square_error_loss(values=upsilon_values, targets=q_targets)
-            + square_error_loss(values=a_values, targets=0)
-        ) + up_case * square_error_loss(
-            values=a_values + upsilon_values, targets=q_targets
+        # ensure a is negative
+        z_values = where(
+            jax.lax.stop_gradient(v_values < q_targets),
+            # if value is under the target apply, apply standard loss
+            se_loss(value=upsilon_values + a_values, target=q_targets),
+            # if value is over over target, then a would become positive
+            # after gradient application, set V to Q and A to 0, so that
+            # V + A = Q + 0, and A < 0
+            se_loss(value=upsilon_values, target=q_targets)
+            + se_loss(value=a_values, target=0),
         )
 
         return z_values.mean()
@@ -398,7 +375,7 @@ class AFU(RLAlgo):
     def _compute_q_loss(
         self, q_values: jnp.ndarray, q_targets: jnp.ndarray
     ) -> None:
-        errors = jnp.square(jnp.abs(q_targets - q_values))
+        errors = se_loss(value=q_values, target=q_targets)
         return errors.mean()
 
     @partial(jax.jit, static_argnums=(0,))
