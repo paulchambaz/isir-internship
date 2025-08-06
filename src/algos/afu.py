@@ -327,9 +327,7 @@ class AFU(RLAlgo):
 
         v_targets_list = self.v_network.apply(v_target_params, next_states)
         v_targets = jnp.min(v_targets_list, axis=0)
-        q_targets = jax.lax.stop_gradient(
-            rewards + self.gamma * (1.0 - dones) * v_targets
-        )
+        q_targets = rewards + self.gamma * (1.0 - dones) * v_targets
 
         v_values = self.v_network.apply(v_params, states)
         q_values_list = self.q_network.apply(q_params, states, actions)
@@ -441,7 +439,7 @@ class AFU(RLAlgo):
         mean_log_probs = log_probs.mean()
         mean_q_values = q_values.mean()
 
-        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
+        alpha = jnp.exp(log_alpha)
         policy_loss = alpha * mean_log_probs - mean_q_values
 
         return policy_loss, jax.lax.stop_gradient(mean_log_probs)

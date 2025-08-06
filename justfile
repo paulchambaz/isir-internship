@@ -35,6 +35,12 @@ compute-tqc-figure2 *ARGS:
 visualize-tqc-figure *ARGS:
   @uv run python -m tools.visualize_tqc_figure {{ ARGS }}
 
+visualize-figure-critics *ARGS:
+  @uv run python -m tools.visualize_figure_critics {{ ARGS }}
+
+visualize-bias *ARGS:
+  @uv run python -m tools.visualize_bias {{ ARGS }}
+
 # Show available commands
 help:
   @just --list
