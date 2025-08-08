@@ -896,7 +896,7 @@ def main() -> None:
             n=n,
             mdp=mdp,
             buffer_size=5,
-            total_steps=50000,
+            total_steps=25000,
             eval_freq=100,  # 100
             num_seed=10,  # 10
             create_ensemble_fn=create_ensemble_fn,
