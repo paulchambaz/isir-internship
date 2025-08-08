@@ -5,6 +5,8 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+COLORS = ["#6ca247", "#d66b6a", "#5591e1", "#39a985", "#ad75ca", "#c77c1e"]
+
 
 def display_graph(results: dict) -> None:
     if "metadata" in results:
@@ -21,14 +23,14 @@ def display_graph(results: dict) -> None:
 
     plt.figure(figsize=(12, 8))
 
-    for (method, n), data in results.items():
+    for i, ((method, n), data) in enumerate(results.items()):
         filtered_results = [
             (step, data["results"][step][0]) for step in all_steps
         ]
         steps, biases = map(list, zip(*filtered_results, strict=True))
 
         plt.plot(
-            steps, biases, color="#d66b6a", label=f"{method} n={n}", linewidth=2
+            steps, biases, color=COLORS[i], label=f"{method} n={n}", linewidth=2
         )
         plt.axhline(y=0, color="black", linewidth=2)
 
