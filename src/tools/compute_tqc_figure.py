@@ -921,7 +921,7 @@ def main() -> None:
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
     tau = 0.05
 
-    num_seed = 1
+    num_seed = 20
     total_steps = 25_000
     eval_freq = 100
 
