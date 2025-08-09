@@ -14,7 +14,7 @@ dependencies = [
   "flax>=0.10.6",
   "gymnasium[classic-control,mujoco]>=1.1.1",
   "jax>=0.7.0",
-  "jax-cuda12-plugin>=0.7.0",
+  # "jax-cuda12-plugin>=0.7.0",
   "matplotlib>=3.10.3",
   "networkx>=3.5",
   "numpy>=2.3.0",
@@ -24,6 +24,10 @@ dependencies = [
   "torch>=2.7.1",
   "tqdm>=4.67.1",
 ]
+
+[dependency-groups]
+dev = ["pytest>=8.4.0", "pytest-cov>=6.1.1", "pytest-xdist>=3.7.0"]
+gpu = ["jax-cuda12-plugin>=0.7.0"]
 
 [project.scripts]
 main = "tools.main:main"
@@ -122,6 +126,3 @@ exclude_lines = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["src", "tests"]
-
-[dependency-groups]
-dev = ["pytest>=8.4.0", "pytest-cov>=6.1.1", "pytest-xdist>=3.7.0"]

@@ -78,7 +78,12 @@
           };
 
           shellHook = ''
-            uv sync --quiet --dev
+            if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+              uv sync --quiet --dev --group gpu
+            else
+              uv sync --quiet --dev
+            fi
+
             source .venv/bin/activate
           '';
         };

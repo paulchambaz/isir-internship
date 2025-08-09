@@ -322,7 +322,6 @@ dependencies = [
     { name = "flax" },
     { name = "gymnasium", extra = ["classic-control", "mujoco"] },
     { name = "jax" },
-    { name = "jax-cuda12-plugin" },
     { name = "matplotlib" },
     { name = "networkx" },
     { name = "numpy" },
@@ -339,6 +338,9 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
 ]
+gpu = [
+    { name = "jax-cuda12-plugin" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -346,7 +348,6 @@ requires-dist = [
     { name = "flax", specifier = ">=0.10.6" },
     { name = "gymnasium", extras = ["classic-control", "mujoco"], specifier = ">=1.1.1" },
     { name = "jax", specifier = ">=0.7.0" },
-    { name = "jax-cuda12-plugin", specifier = ">=0.7.0" },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "networkx", specifier = ">=3.5" },
     { name = "numpy", specifier = ">=2.3.0" },
@@ -363,6 +364,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.1.1" },
     { name = "pytest-xdist", specifier = ">=3.7.0" },
 ]
+gpu = [{ name = "jax-cuda12-plugin", specifier = ">=0.7.0" }]
 
 [[package]]
 name = "jax"

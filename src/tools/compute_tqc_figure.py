@@ -8,7 +8,6 @@
 
 import argparse
 import itertools
-import math
 import pickle
 from collections.abc import Callable
 from functools import partial
@@ -22,7 +21,7 @@ import optax
 from jax import random
 from tqdm import tqdm
 
-from algos.utils import lerp, se_loss, soft_update, where
+from algos.utils import lerp, quantile_loss, se_loss, soft_update, where
 
 
 class ToyMdp:
@@ -123,13 +122,16 @@ class ZNetwork(nn.Module):
     n_critics: int
 
     @nn.compact
-    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, states: jnp.ndarray, actions: jnp.ndarray
+    ) -> jnp.ndarray:
+        states_actions = jnp.concatenate([states, actions], axis=1)
         return jnp.stack(
             [
                 MLP(
                     hidden_dims=self.hidden_dims,
                     output_dim=self.n_quantiles,
-                )(actions)
+                )(states_actions)
                 for _ in range(self.n_critics)
             ],
             axis=1,
@@ -166,6 +168,10 @@ class AvgEnsemble:
             self.params, self.opt_state, states, actions, targets
         )
 
+        self.target_params = soft_update(
+            self.target_params, self.params, self.tau
+        )
+
     @partial(jax.jit, static_argnums=(0,))
     def _compute_targets(
         self,
@@ -177,24 +183,11 @@ class AvgEnsemble:
         grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
         grid_next_states = jnp.zeros_like(grid_actions)
 
-        print(f"{grid_next_states=}")
-        print(f"{grid_actions=}")
-
         q_values_next_list = self.network.apply(
             target_params, grid_next_states, grid_actions
         )
-        print(f"{q_values_next_list=}")
-
         q_values_next = q_values_next_list.mean(axis=1)
-        print(f"{q_values_next=}")
-
         v_values_next = jnp.max(q_values_next)
-        print(f"{v_values_next=}")
-
-        targets = rewards + self.gamma * (1.0 - dones) * v_values_next
-        print(f"{targets=}")
-
-        exit()
 
         return rewards + self.gamma * (1.0 - dones) * v_values_next
 
@@ -208,9 +201,9 @@ class AvgEnsemble:
         targets: jnp.ndarray,
     ) -> tuple[dict, optax.OptState]:
         def loss_fn(params: dict) -> jnp.ndarray:
-            values = self.network.apply(params, actions)
-            targets_expanded = targets[:, None]
-            return jnp.mean((values - targets_expanded) ** 2)
+            values = self.network.apply(params, states, actions)
+            errors = se_loss(value=values, target=targets)
+            return jnp.mean(errors)
 
         grads = jax.grad(loss_fn)(params)
         updates, new_opt_state = self.optim.update(grads, opt_state)
@@ -219,17 +212,23 @@ class AvgEnsemble:
         return new_params, new_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
-    def _call(self, params: dict, actions: jnp.ndarray) -> jnp.ndarray:
-        return self.network.apply(params, actions).mean(axis=1)
+    def _call(
+        self, params: dict, states: jnp.ndarray, actions: jnp.ndarray
+    ) -> jnp.ndarray:
+        q_values_list = self.network.apply(params, states, actions)
+        return q_values_list.mean(axis=1)
 
-    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
-        return self._call(self.params, actions)
+    def __call__(
+        self, states: jnp.ndarray, actions: jnp.ndarray
+    ) -> jnp.ndarray:
+        return self._call(self.params, states, actions)
 
 
 class MinEnsemble:
     def __init__(self, n: int, gamma: float, key: jnp.ndarray) -> None:
         self.gamma = gamma
         self.buffer = None
+        self.tau = 0.05
 
         self.network = QNetwork(hidden_dims=[50, 50], n_critics=n)
         self.optim = optax.adam(1e-3)
@@ -238,39 +237,59 @@ class MinEnsemble:
         dummy_action = jnp.zeros((1, 1))
 
         self.params = self.network.init(key, dummy_state, dummy_action)
+        self.target_params = self.params
         self.opt_state = self.optim.init(self.params)
 
     def set_buffer(self, dataset: list) -> None:
         self.buffer = dataset
 
     def update(self) -> None:
-        actions, rewards = self.buffer
-        targets = self._compute_targets(self.params, rewards)
+        states, actions, rewards, next_states, dones = self.buffer
+
+        targets = self._compute_targets(
+            self.target_params, rewards, next_states, dones
+        )
+
         self.params, self.opt_state = self._update_network(
-            self.params, self.opt_state, actions, targets
+            self.params, self.opt_state, states, actions, targets
+        )
+
+        self.target_params = soft_update(
+            self.target_params, self.params, self.tau
         )
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_targets(
-        self, params: dict, rewards: jnp.ndarray
+        self,
+        target_params: dict,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
     ) -> jnp.ndarray:
         grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
-        grid_q_values = self.network.apply(params, grid_actions).min(axis=1)
-        best_q_value = jnp.max(grid_q_values)
-        return rewards + self.gamma * best_q_value
+        grid_next_states = jnp.zeros_like(grid_actions)
+
+        q_values_next_list = self.network.apply(
+            target_params, grid_next_states, grid_actions
+        )
+        q_values_next = q_values_next_list.min(axis=1)
+        v_values_next = jnp.max(q_values_next)
+
+        return rewards + self.gamma * (1.0 - dones) * v_values_next
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_network(
         self,
         params: dict,
         opt_state: optax.OptState,
+        states: jnp.ndarray,
         actions: jnp.ndarray,
         targets: jnp.ndarray,
     ) -> tuple[dict, optax.OptState]:
         def loss_fn(params: dict) -> jnp.ndarray:
-            values = self.network.apply(params, actions)
-            targets_expanded = targets[:, None]
-            return jnp.mean((values - targets_expanded) ** 2)
+            values = self.network.apply(params, states, actions)
+            errors = se_loss(value=values, target=targets)
+            return jnp.mean(errors)
 
         grads = jax.grad(loss_fn)(params)
         updates, new_opt_state = self.optim.update(grads, opt_state)
@@ -279,11 +298,16 @@ class MinEnsemble:
         return new_params, new_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
-    def _call(self, params: dict, actions: jnp.ndarray) -> jnp.ndarray:
-        return self.network.apply(params, actions).min(axis=1)
+    def _call(
+        self, params: dict, states: jnp.ndarray, actions: jnp.ndarray
+    ) -> jnp.ndarray:
+        q_values_list = self.network.apply(params, states, actions)
+        return q_values_list.min(axis=1)
 
-    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
-        return self._call(self.params, actions)
+    def __call__(
+        self, states: jnp.ndarray, actions: jnp.ndarray
+    ) -> jnp.ndarray:
+        return self._call(self.params, states, actions)
 
 
 class TqcEnsemble:
@@ -292,6 +316,7 @@ class TqcEnsemble:
     ) -> None:
         self.gamma = gamma
         self.buffer = None
+        self.tau = 0.05
 
         self.num_quantiles = 25
         self.num_networks = num_networks
@@ -305,86 +330,67 @@ class TqcEnsemble:
         )
         self.optim = optax.adam(1e-3)
 
-        self.tau_levels = jnp.array(
-            [
-                (2 * m - 1) / (2 * self.num_quantiles)
-                for m in range(1, self.num_quantiles + 1)
-            ]
-        )
-        self.all_tau = jnp.tile(self.tau_levels, self.num_networks)
-
         dummy_state = jnp.zeros((1, 1))
         dummy_action = jnp.zeros((1, 1))
 
         self.params = self.network.init(key, dummy_state, dummy_action)
+        self.target_params = self.params
         self.opt_state = self.optim.init(self.params)
 
     def set_buffer(self, dataset: list) -> None:
         self.buffer = dataset
 
     def update(self) -> None:
-        actions, rewards = self.buffer
-        targets = self._compute_targets(self.params, rewards)
+        states, actions, rewards, next_states, dones = self.buffer
+
+        targets = self._compute_targets(
+            self.target_params, rewards, next_states, dones
+        )
+
         self.params, self.opt_state = self._update_network(
-            self.params, self.opt_state, actions, targets
+            self.params, self.opt_state, states, actions, targets
+        )
+
+        self.target_params = soft_update(
+            self.target_params, self.params, self.tau
         )
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_targets(
-        self, params: dict, rewards: jnp.ndarray
+        self,
+        target_params: dict,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
     ) -> jnp.ndarray:
         grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
+        grid_next_states = jnp.zeros_like(grid_actions)
 
-        grid_quantiles = self.network.apply(params, grid_actions).reshape(
-            grid_actions.shape[0], -1
+        quantiles = self.network.apply(
+            target_params, grid_next_states, grid_actions
         )
-        grid_sorted = jnp.sort(grid_quantiles, axis=-1)
-        grid_truncated = grid_sorted[:, : self.total_kept]
-        grid_q_values = jnp.mean(grid_truncated, axis=-1)
 
-        best_action_idx = jnp.argmax(grid_q_values)
+        union_quantiles = quantiles.reshape(grid_actions.shape[0], -1)
+        sorted_quantiles = jnp.sort(union_quantiles, axis=-1)
+        truncated_quantiles = sorted_quantiles[:, : self.total_kept]
 
-        next_quantiles = grid_quantiles[best_action_idx].flatten()
-        next_sorted = jnp.sort(next_quantiles)
-        next_truncated = next_sorted[: self.total_kept]
+        v_values_next = jnp.max(truncated_quantiles, axis=0)
 
-        return rewards[:, None] + self.gamma * next_truncated[None, :]
+        return rewards + self.gamma * (1.0 - dones) * v_values_next
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_network(
         self,
         params: dict,
         opt_state: optax.OptState,
+        states: jnp.ndarray,
         actions: jnp.ndarray,
         targets: jnp.ndarray,
     ) -> tuple[dict, optax.OptState]:
         def loss_fn(params: dict) -> jnp.ndarray:
-            current_quantiles = self.network.apply(params, actions).reshape(
-                actions.shape[0], -1
-            )
-
-            targets_expanded = targets[:, None, :]
-            quantiles_expanded = current_quantiles[:, :, None]
-
-            diff = targets_expanded - quantiles_expanded
-            abs_diff = jnp.abs(diff)
-
-            huber = jnp.where(
-                abs_diff <= 1.0, 0.5 * diff * diff, abs_diff - 0.5
-            )
-
-            indicator = (diff < 0).astype(jnp.float32)
-            tau_expanded = self.all_tau[None, :, None]
-            weights = jnp.abs(tau_expanded - indicator)
-
-            weighted_loss = weights * huber
-            total_loss = jnp.sum(weighted_loss)
-
-            normalization = (
-                targets.shape[0] * current_quantiles.shape[1] * targets.shape[1]
-            )
-
-            return total_loss / normalization
+            values = self.network.apply(params, states, actions)
+            errors = quantile_loss(value=values, target=targets)
+            return errors.mean()
 
         grads = jax.grad(loss_fn)(params)
         updates, new_opt_state = self.optim.update(grads, opt_state)
@@ -393,16 +399,21 @@ class TqcEnsemble:
         return new_params, new_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
-    def _call(self, params: dict, actions: jnp.ndarray) -> jnp.ndarray:
-        quantiles = self.network.apply(params, actions)
+    def _call(
+        self, params: dict, states: jnp.ndarray, actions: jnp.ndarray
+    ) -> jnp.ndarray:
+        quantiles = self.network.apply(params, states, actions)
+
         union_quantiles = quantiles.reshape(actions.shape[0], -1)
         sorted_quantiles = jnp.sort(union_quantiles, axis=-1)
-        truncated = sorted_quantiles[:, : self.total_kept]
+        truncated_quantiles = sorted_quantiles[:, : self.total_kept]
 
-        return jnp.mean(truncated, axis=-1)
+        return jnp.mean(truncated_quantiles, axis=-1)
 
-    def __call__(self, actions: jnp.ndarray) -> jnp.ndarray:
-        return self._call(self.params, actions)
+    def __call__(
+        self, states: jnp.ndarray, actions: jnp.ndarray
+    ) -> jnp.ndarray:
+        return self._call(self.params, states, actions)
 
 
 class TopEnsemble:
@@ -410,6 +421,7 @@ class TopEnsemble:
         self.beta = beta
         self.gamma = gamma
         self.buffer = None
+        self.tau = 0.05
 
         self.n_critics = 2
         self.num_quantiles = 25
@@ -421,49 +433,73 @@ class TopEnsemble:
         )
         self.optim = optax.adam(1e-3)
 
-        self.tau_levels = jnp.array(
-            [
-                (2 * m - 1) / (2 * self.num_quantiles)
-                for m in range(1, self.num_quantiles + 1)
-            ]
-        )
-        self.all_tau = jnp.tile(self.tau_levels, self.n_critics)
-
         dummy_state = jnp.zeros((1, 1))
         dummy_action = jnp.zeros((1, 1))
 
         self.params = self.network.init(key, dummy_state, dummy_action)
+        self.target_params = self.params
         self.opt_state = self.optim.init(self.params)
 
     def set_buffer(self, dataset: list) -> None:
         self.buffer = dataset
 
     def update(self) -> None:
-        actions, rewards = self.buffer
-        targets = self._compute_targets(self.params, rewards)
+        states, actions, rewards, next_states, dones = self.buffer
+
+        targets = self._compute_targets(
+            self.target_params, rewards, next_states, dones
+        )
+
         self.params, self.opt_state = self._update_network(
-            self.params, self.opt_state, actions, targets
+            self.params, self.opt_state, states, actions, targets
+        )
+
+        self.target_params = soft_update(
+            self.target_params, self.params, self.tau
         )
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_targets(
-        self, params: dict, rewards: jnp.ndarray
+        self,
+        target_params: dict,
+        rewards: jnp.ndarray,
+        next_states: jnp.ndarray,
+        dones: jnp.ndarray,
     ) -> jnp.ndarray:
+        print(f"{rewards=}")
+        print(f"{next_states=}")
+        print(f"{dones=}")
+
         grid_actions = jnp.linspace(-1, 1, 2001).reshape(-1, 1)
+        grid_next_states = jnp.zeros_like(grid_actions)
 
-        grid_quantiles = self.network.apply(params, grid_actions)
+        print(f"{grid_actions=}")
+        print(f"{grid_next_states=}")
 
-        mean_quantiles = jnp.mean(grid_quantiles, axis=1)
-        std_quantiles = jnp.std(grid_quantiles, axis=1)
+        quantiles = self.network.apply(
+            target_params, grid_next_states, grid_actions
+        )
 
-        belief_quantiles = mean_quantiles + self.beta * std_quantiles
+        print(f"{quantiles=}")
 
-        belief_q_values = jnp.mean(belief_quantiles, axis=1)
+        quantiles_mean = jnp.mean(quantiles, axis=1)
+        quantiles_std = jnp.std(quantiles, axis=1)
 
-        best_action_idx = jnp.argmax(belief_q_values)
-        next_quantiles = belief_quantiles[best_action_idx]
+        print(f"{quantiles_mean=}")
+        print(f"{quantiles_std=}")
 
-        return rewards[:, None] + self.gamma * next_quantiles[None, :]
+        quantiles_belief = quantiles_mean + self.beta * quantiles_std
+
+        print(f"{quantiles_belief=}")
+
+        exit()
+
+        # belief_q_values = jnp.mean(belief_quantiles, axis=1)
+        #
+        # best_action_idx = jnp.argmax(belief_q_values)
+        # next_quantiles = belief_quantiles[best_action_idx]
+        #
+        # return rewards[:, None] + self.gamma * next_quantiles[None, :]
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_network(
@@ -716,8 +752,8 @@ class AFUEnsemble:
         states: jnp.ndarray,
         actions: jnp.ndarray,
     ) -> jnp.ndarray:
-        q_values = self.q_network.apply(q_params, states, actions)
-        return q_values[:, -1]
+        q_values_list = self.q_network.apply(q_params, states, actions)
+        return q_values_list[:, -1]
 
     def __call__(
         self, states: jnp.ndarray, actions: jnp.ndarray
@@ -798,6 +834,8 @@ def compute_bias_variance(
     eval_freq: int,
     num_seed: int,
     create_ensemble_fn: Callable,
+    progress_bar: any,  # TODO: type correctly
+    method: str,
 ) -> dict:
     eval_actions = jnp.linspace(-1, 1, 2000).reshape(-1, 1)
     eval_states = jnp.zeros_like(eval_actions)
@@ -837,6 +875,11 @@ def compute_bias_variance(
                 (bias, variance, policy_error, predicted_q.tolist())
             )
 
+            progress_bar.set_description(
+                f"Running ({method} n={n}), seed={seed + 1}/{num_seed}, step={step}/{total_steps}"
+            )
+            progress_bar.update(1)
+
     final_results = {}
     for step, results in step_results.items():
         metrics = np.array(
@@ -867,39 +910,48 @@ def main() -> None:
 
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
-    avg_data = [5]
+    num_seed = 5
+    total_steps = 25_000
+    eval_freq = 100
+
+    avg_data = [2]
     # avg_data = [1, 3, 5, 10, 20, 50]
-    min_data = [2, 3, 4, 6, 8, 10]
-    tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    min_data = [2]
+    # min_data = [2, 3, 4, 6, 8, 10]
+    tqc_data = [2]
+    # tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
     top_data = [-1.0, -0.7, -0.5, 0.0, 0.5, 1.0]
     rho_data = [0.1, 0.3, 0.5, 0.7, 0.9]
 
     experiments = list(
         itertools.chain(
-            # [("avg", n, create_avg) for n in avg_data],
-            # [("min", n, create_min_ensemble) for n in min_data],
-            # [("tqc", n, create_tqc_ensemble) for n in tqc_data],
+            [("avg", n, create_avg) for n in avg_data],
+            [("min", n, create_min_ensemble) for n in min_data],
+            [("tqc", n, create_tqc_ensemble) for n in tqc_data],
             # [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
             # [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
             # [("top", beta, create_top_ensemble) for beta in top_data],
-            [("afu", rho, create_afu_ensemble) for rho in rho_data],
+            # [("afu", rho, create_afu_ensemble) for rho in rho_data],
         )
     )
 
+    total_iterations = len(experiments) * num_seed * (total_steps // eval_freq)
+
     results = {}
 
-    progress_bar = tqdm(experiments, desc="Running experiments")
+    progress_bar = tqdm(total=total_iterations, desc="Running experiments")
 
-    for method, n, create_ensemble_fn in progress_bar:
-        progress_bar.set_postfix({"method": method, "n": n})
+    for method, n, create_ensemble_fn in experiments:
         results[(method, n)] = compute_bias_variance(
             n=n,
             mdp=mdp,
-            buffer_size=5,
-            total_steps=25000,
-            eval_freq=100,  # 100
-            num_seed=10,  # 10
+            buffer_size=50,
+            total_steps=total_steps,
+            eval_freq=eval_freq,
+            num_seed=num_seed,
             create_ensemble_fn=create_ensemble_fn,
+            progress_bar=progress_bar,
+            method=method,
         )
 
     # for key, value in results.items():
