@@ -24,6 +24,10 @@ from tqdm import tqdm
 from algos.utils import lerp, quantile_loss, se_loss, soft_update, where
 
 
+print(f"JAX backend: {jax.default_backend()}")
+print(f"JAX devices: {jax.devices()}")
+
+
 class ToyMdp:
     def __init__(
         self, gamma: float, sigma: float, a0: float, a1: float, nu: float
