@@ -6,62 +6,36 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 COLORS = [
-    # avg
-    "#5591e1",
-    "#61a0f4",
-    "#70b0ff",
-    "#87c0ff",
-    "#a4d1ff",
-    "#c0e1ff",
-    # "#dbf1ff",
-    # min
-    "#d76868",
-    "#e87876",
-    "#fa8785",
-    "#ff9895",
-    "#ffb2af",
-    "#ffcbc8",
-    # "#ffe3e0",
-    # tqc
-    "#6aa142",
-    "#79b152",
-    "#88c162",
-    "#98d171",
-    "#a7e281",
-    "#b7f291",
-    "#c7ffa1",
-    # ttqc
-    "#00a97f",
-    "#0db98e",
-    "#32ca9d",
-    "#49daac",
-    "#5debbc",
-    "#70fccc",
-    "#a2ffe1",
-    # ndtop
-    "#a19100",
-    "#b0a11b",
-    "#c0b034",
-    "#d0c047",
-    "#e0d159",
-    "#f1e16b",
-    # "#fff27c",
-    # top
-    "#c87b13",
-    "#d88a2c",
-    "#e99a3f",
-    "#faaa51",
-    "#ffba62",
-    "#ffd196",
-    # "#ffe7c2",
-    # afu
-    "#a178d5",
-    "#b087e6",
-    "#c097f6",
-    "#d0a7ff",
-    "#ddbbff",
-    "#e9d1ff",
-    "#f6e6ff",
+    "#7cb85d",    # sage green
+    "#e67c5f",    # coral
+    "#6b98d9",    # periwinkle
+    "#4fb09a",    # seafoam
+    "#b86dc7",    # lavender
+    "#d4923a",    # amber
+    "#8ba356",    # olive green
+    "#df6980",    # rose
+    "#5d8dd4",    # steel blue
+    "#3cb295",    # teal
+    "#c778b5",    # orchid
+    "#c98f42",    # bronze
+    "#79b859",    # forest green
+    "#e17464",    # salmon
+    "#758cd0",    # slate blue
+    "#47a68e",    # moss green
+    "#ba6fc9",    # plum
+    "#cc8538",    # terracotta
+    "#6fb762",    # lime green
+    "#dd7159",    # brick red
+    "#6887cc",    # cornflower
+    "#39b187",    # jade
+    "#b573c4",    # berry
+    "#d18c34",    # golden
+    "#85ad5a",    # khaki green
+    "#e06e6d",    # coral red
+    "#6d94d7",    # sky blue
+    "#42ad92",    # teal green
+    "#a97dc6",    # purple
+    "#bf8841"     # rust
 ]
 
 
