@@ -63,10 +63,7 @@ def create_tqc_visualization(results: dict, step: int) -> None:
 
         raw_data = value["raw_data"][step]
         all_predicted_q = np.array(
-            [
-                np.array(predicted_q_list)
-                for _, _, _, predicted_q_list in raw_data
-            ]
+            [np.array(predicted_q) for _, _, _, predicted_q in raw_data]
         )
 
         all_errors = (all_predicted_q - true_q).reshape(-1)
