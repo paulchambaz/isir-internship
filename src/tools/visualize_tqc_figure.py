@@ -77,7 +77,7 @@ def create_tqc_visualization(results: dict, step: int) -> None:
         points[method].setdefault("y", []).append(error_variance)
         points[method].setdefault("n", []).append(str(n))
 
-    for key, data in points.items():
+    for _, data in points.items():
         if "x" not in data:
             continue
 
@@ -172,12 +172,12 @@ def create_tqc_visualization(results: dict, step: int) -> None:
 
     plt.tight_layout()
 
-    plt.show()
-    # plt.savefig(
-    #     f"paper/figures/tqc_figure/step_{step:05d}.svg",
-    #     bbox_inches="tight",
-    #     dpi=150,
-    # )
+    # plt.show()
+    plt.savefig(
+        f"paper/figures/tqc_figure/step_{step:05d}.png",
+        bbox_inches="tight",
+        dpi=150,
+    )
     plt.close()
 
 
@@ -196,9 +196,9 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    create_tqc_visualization(results, 25_000)
-    # for i in tqdm(range(100, 25001, 100)):
-    #     create_tqc_visualization(results, i)
+    # create_tqc_visualization(results, 25_000)
+    for i in tqdm(range(100, 25001, 100)):
+        create_tqc_visualization(results, i)
 
 
 if __name__ == "__main__":
