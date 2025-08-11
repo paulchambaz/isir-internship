@@ -148,7 +148,6 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    # create_q_visualization(results, "avg", 1, 2000)
     for i in tqdm(range(100, 25001, 100)):
         create_q_visualization(results, "avg", 1, i)
         create_q_visualization(results, "avg", 3, i)

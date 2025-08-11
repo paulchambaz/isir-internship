@@ -10,8 +10,175 @@ import argparse
 import pickle
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.lines import Line2D
 from tqdm import tqdm
+
+
+def robust_mean_var(data: np.ndarray, p1: float, p2: float) -> float:
+    q1, q2 = np.quantile(data, [p1, p2])
+    selection = data[(data >= q1) & (data <= q2)]
+    mean = np.mean(selection) if len(selection) == 0 else np.mean(data)
+    var = np.var(selection) if len(selection) == 0 else np.var(data)
+    return float(mean), float(var)
+
+
+def create_tqc_visualization(results: dict, step: int) -> None:
+    fig, ax = plt.subplots(figsize=(12, 9))
+
+    ax.set_yscale("log")
+
+    ax.grid(visible=True, which="major", alpha=0.6, linewidth=0.8)
+
+    ax.set_xlabel(
+        r"$\mathbb{E}[\Delta(a)]$, $\quad a \sim \mathcal{U}(-1,1)$",
+        fontsize=30,
+    )
+    ax.set_ylabel(
+        r"$\mathbb{V}\text{ar}[\Delta(a)]$, $\quad a \sim \mathcal{U}(-1,1)$",
+        fontsize=30,
+    )
+
+    ax.set_title(f"Training step: {step}", fontsize=24, pad=20)
+
+    ax.set_ylim(1e0, 1e5)
+    ax.set_xlim(-1e2, 1e2)
+
+    points = {
+        "avg": {"c": "#5591e1"},
+        "min": {"c": "#d76868"},
+        "tqc": {"c": "#6aa142"},
+        "ttqc": {"c": "#00a97f"},
+        "ndtop": {"c": "#a19100"},
+        "top": {"c": "#c87b13"},
+        "afu": {"c": "#a178d5"},
+    }
+
+    for (method, n), value in tqdm(results.items()):
+        metadata = value["metadata"]
+        true_q = np.array(metadata["true_q"])
+
+        if step not in value["raw_data"]:
+            continue
+
+        raw_data = value["raw_data"][step]
+        all_predicted_q = np.array(
+            [
+                np.array(predicted_q_list)
+                for _, _, _, predicted_q_list in raw_data
+            ]
+        )
+
+        all_errors = (all_predicted_q - true_q).reshape(-1)
+
+        error_bias, error_variance = robust_mean_var(all_errors, 0.1, 0.9)
+
+        points[method].setdefault("x", []).append(error_bias)
+        points[method].setdefault("y", []).append(error_variance)
+        points[method].setdefault("n", []).append(str(n))
+
+    for key, data in points.items():
+        if "x" not in data:
+            continue
+
+        ax.scatter(data["x"], data["y"], c=data["c"], s=300, alpha=0.7)
+        for x, y, n in zip(data["x"], data["y"], data["n"], strict=True):
+            ax.text(x, y, n, ha="center", va="center", fontsize=16)
+
+    legend_elements = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#a178d5",
+            markersize=18,
+            alpha=0.7,
+            label=r"AFU ($\rho$ coefficient)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#c87b13",
+            markersize=18,
+            alpha=0.7,
+            label=r"TOP N=2 M=25 ($\beta$ coefficient)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#a19100",
+            markersize=18,
+            alpha=0.7,
+            label=r"ND-TOP N=2 ($\beta$ coefficient)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#00a97f",
+            markersize=18,
+            alpha=0.7,
+            label="TQC N=1 M=25 (d dropped quantiles)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#6aa142",
+            markersize=18,
+            alpha=0.7,
+            label="TQC N=2 M=25 (d dropped quantiles)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#d76868",
+            markersize=18,
+            alpha=0.7,
+            label="MIN (N Q-networks)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#5591e1",
+            markersize=18,
+            alpha=0.7,
+            label="AVG (N Q-networks)",
+        ),
+    ]
+
+    legend = ax.legend(
+        handles=legend_elements,
+        loc="upper left",
+        frameon=True,
+        fancybox=True,
+        shadow=True,
+        fontsize=16,
+    )
+
+    legend.get_frame().set_facecolor("white")
+    legend.get_frame().set_alpha(0.7)
+
+    plt.tight_layout()
+
+    plt.show()
+    # plt.savefig(
+    #     f"paper/figures/tqc_figure/step_{step:05d}.svg",
+    #     bbox_inches="tight",
+    #     dpi=150,
+    # )
+    plt.close()
 
 
 def main() -> None:
@@ -29,169 +196,9 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    all_steps = set()
-    for step_data in results.values():
-        all_steps.update(step_data.keys())
-    all_steps = sorted(all_steps)
-
-    # print(all_steps)
-
-    for step in tqdm(all_steps):
-        if step % 1000 == 0:
-            fig, ax = plt.subplots(figsize=(12, 6))
-
-            ax.set_xscale("symlog", linthresh=1)
-            ax.set_yscale("log")
-
-            ax.grid(visible=True, which="major", alpha=0.6, linewidth=0.8)
-
-            ax.set_xlabel(
-                r"$\mathbb{E}[\Delta(a)]$, $\quad a \sim \mathcal{U}(-1,1)$",
-                fontsize=30,
-            )
-            ax.set_ylabel(
-                r"$\mathbb{V}\text{ar}[\Delta(a)]$, $\quad a \sim \mathcal{U}(-1,1)$",
-                fontsize=30,
-            )
-
-            ax.set_title(f"Training step: {step}", fontsize=24, pad=20)
-
-            ax.set_ylim(1e-3, 1e5)
-            ax.set_xlim(-1e3, 1e5)
-
-            points = {
-                "avg": {"color": "#5591e1"},
-                "min": {"color": "#d66b6a"},
-                "tqc": {"color": "#6ca247"},
-                "ttqc": {"color": "#39a985"},
-                "ndtop": {"color": "#a19101"},
-                "top": {"color": "#c77c1e"},
-            }
-
-            for (method, n), step_data in results.items():
-                bias, variance, _ = step_data[step]
-
-                # if method == "avg" and n != 1:
-                #     continue
-
-                points[method].setdefault("x", []).append(bias)
-                points[method].setdefault("y", []).append(variance)
-                points[method].setdefault("numbers", []).append(str(n))
-
-            for key, data in points.items():
-                if key not in ["avg", "min"]:
-                    continue
-
-                if "x" not in data:
-                    continue
-
-                ax.scatter(
-                    data["x"],
-                    data["y"],
-                    c=data["color"],
-                    s=300,
-                    alpha=0.7,
-                )
-                for x, y, num in zip(
-                    data["x"],
-                    data["y"],
-                    data["numbers"],
-                    strict=True,
-                ):
-                    ax.text(
-                        x,
-                        y,
-                        num,
-                        ha="center",
-                        va="center",
-                        fontsize=16,
-                        fontweight="bold",
-                    )
-
-            legend_elements = [
-                # Line2D(
-                #     [0],
-                #     [0],
-                #     marker="o",
-                #     color="w",
-                #     markerfacecolor="#c77c1e",
-                #     markersize=18,
-                #     alpha=0.7,
-                #     label=r"TOP N=2 M=25 ($\beta$ coefficient)",
-                # ),
-                # Line2D(
-                #     [0],
-                #     [0],
-                #     marker="o",
-                #     color="w",
-                #     markerfacecolor="#a19101",
-                #     markersize=18,
-                #     alpha=0.7,
-                #     label=r"ND-TOP N=2 ($\beta$ coefficient)",
-                # ),
-                # Line2D(
-                #     [0],
-                #     [0],
-                #     marker="o",
-                #     color="w",
-                #     markerfacecolor="#39a985",
-                #     markersize=18,
-                #     alpha=0.7,
-                #     label="TQC N=1 M=25 (d dropped quantiles)",
-                # ),
-                # Line2D(
-                #     [0],
-                #     [0],
-                #     marker="o",
-                #     color="w",
-                #     markerfacecolor="#6ca247",
-                #     markersize=18,
-                #     alpha=0.7,
-                #     label="TQC N=2 M=25 (d dropped quantiles)",
-                # ),
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    markerfacecolor="#d66b6a",
-                    markersize=18,
-                    alpha=0.7,
-                    label="MIN (N Q-networks)",
-                ),
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    markerfacecolor="#5591e1",
-                    markersize=18,
-                    alpha=0.7,
-                    label="AVG (N Q-networks)",
-                ),
-            ]
-
-            legend = ax.legend(
-                handles=legend_elements,
-                loc="upper left",
-                frameon=True,
-                fancybox=True,
-                shadow=True,
-                fontsize=16,
-            )
-
-            legend.get_frame().set_facecolor("white")
-            legend.get_frame().set_alpha(0.7)
-
-            plt.tight_layout()
-
-            plt.show()
-            # plt.savefig(
-            #     f"paper/figures/tqc_figure/step_{step:05d}.svg",
-            #     bbox_inches="tight",
-            #     dpi=150,
-            # )
-            plt.close()
+    create_tqc_visualization(results, 25_000)
+    # for i in tqdm(range(100, 25001, 100)):
+    #     create_tqc_visualization(results, i)
 
 
 if __name__ == "__main__":
