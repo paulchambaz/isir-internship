@@ -54,7 +54,7 @@ def create_tqc_visualization(results: dict, step: int) -> None:
         "afu": {"c": "#a178d5"},
     }
 
-    for (method, n), value in tqdm(results.items()):
+    for (method, n), value in results.items():
         metadata = value["metadata"]
         true_q = np.array(metadata["true_q"])
 
