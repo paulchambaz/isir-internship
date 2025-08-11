@@ -126,11 +126,11 @@ def create_q_visualization(
     plt.suptitle(rf"{method} - $n={n}$ - Step {step}", fontsize=24)
     plt.tight_layout()
 
-    plt.show()
-    # directory = f"paper/figures/figure_critics/{method}_{n}"
-    # Path(directory).mkdir(parents=True, exist_ok=True)
-    # plt.savefig(f"{directory}/{step:05d}.png", bbox_inches="tight", dpi=100)
-    # plt.close()
+    # plt.show()
+    directory = f"paper/figures/figure_critics/{method}_{n}"
+    Path(directory).mkdir(parents=True, exist_ok=True)
+    plt.savefig(f"{directory}/{step:05d}.png", bbox_inches="tight", dpi=100)
+    plt.close()
 
 
 def main() -> None:
