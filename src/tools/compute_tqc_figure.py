@@ -65,7 +65,7 @@ class MLP(nn.Module):
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         for hidden_dim in self.hidden_dims:
-            x = jax.nn.sigmoid(
+            x = jax.nn.relu(
                 nn.Dense(
                     hidden_dim,
                     kernel_init=jax.nn.initializers.he_uniform(),
@@ -919,7 +919,7 @@ def main() -> None:
         jax.config.update("jax_platform_name", "cpu")
 
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
-    tau = 0.05
+    tau = 0.005
 
     num_seed = 20
     total_steps = 25_000
