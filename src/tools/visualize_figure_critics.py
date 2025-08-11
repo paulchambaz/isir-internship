@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
 
-from .utils import compute_stats
-
 
 def create_q_visualization(
     results: dict, method: str, n: int | float, step: int
@@ -35,7 +33,11 @@ def create_q_visualization(
     error = predicted_q - true_q
     max_q = true_q[np.argmin(np.abs(eval_actions - optim_action))]
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 9))
+    mean_true_q = np.mean(true_q)
+    mean_predicted_q = np.mean(predicted_q)
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 12))
+
     plt.subplots_adjust(hspace=0.3)
 
     ax1.plot(
@@ -103,20 +105,32 @@ def create_q_visualization(
         zorder=5,
     )
 
-    ax2.set_ylim(-10, 10)
+    ax2.set_ylim(-50, 50)
     ax2.set_xlabel("Action")
     ax2.set_ylabel("Error")
-    # ax2.set_yscale("symlog", linthresh=0.1)
     ax2.grid(visible=True, alpha=0.25)
 
-    plt.suptitle(f"Step {step}", fontsize=24)
+    ax3.plot(eval_actions, true_q, color="black", linewidth=4)
+    ax3.plot(
+        eval_actions,
+        predicted_q - mean_predicted_q + mean_true_q,
+        color="#5591e1",
+        linewidth=2,
+    )
+    ax3.scatter(actions, actions_q_values, color="#d66b6a", s=20, zorder=5)
+    ax3.scatter([optim_action], [max_q], color="#d66b6a", s=100, zorder=5)
+    ax3.set_xlabel("Action")
+    ax3.set_ylabel(r"$Q - \text{Mean} [Q_\theta] + \text{Mean} [Q^*]$")
+    ax3.grid(visible=True, alpha=0.25)
+
+    plt.suptitle(rf"{method} - $n={n}$ - Step {step}", fontsize=24)
     plt.tight_layout()
 
-    directory = "paper/figures/figure_critics/bare"
-    # plt.show()
-    Path(directory).mkdir(parents=True, exist_ok=True)
-    plt.savefig(f"{directory}/{step:05d}.png", bbox_inches="tight", dpi=100)
-    plt.close()
+    plt.show()
+    # directory = f"paper/figures/figure_critics/{method}_{n}"
+    # Path(directory).mkdir(parents=True, exist_ok=True)
+    # plt.savefig(f"{directory}/{step:05d}.png", bbox_inches="tight", dpi=100)
+    # plt.close()
 
 
 def main() -> None:
@@ -135,8 +149,62 @@ def main() -> None:
     )
 
     # create_q_visualization(results, "avg", 1, 2000)
-    for i in tqdm(range(100, 20001, 100)):
+    for i in tqdm(range(100, 25001, 100)):
+        if i != 25000:
+            continue
+
         create_q_visualization(results, "avg", 1, i)
+        # create_q_visualization(results, "avg", 3, i)
+        # create_q_visualization(results, "avg", 5, i)
+        # create_q_visualization(results, "avg", 10, i)
+        # create_q_visualization(results, "avg", 20, i)
+        # create_q_visualization(results, "avg", 50, i)
+        #
+        # create_q_visualization(results, "min", 2, i)
+        # create_q_visualization(results, "min", 3, i)
+        # create_q_visualization(results, "min", 4, i)
+        # create_q_visualization(results, "min", 6, i)
+        # create_q_visualization(results, "min", 8, i)
+        # create_q_visualization(results, "min", 10, i)
+        #
+        # create_q_visualization(results, "ttqc", 1, i)
+        # create_q_visualization(results, "ttqc", 2, i)
+        # create_q_visualization(results, "ttqc", 3, i)
+        # create_q_visualization(results, "ttqc", 4, i)
+        # create_q_visualization(results, "ttqc", 6, i)
+        # create_q_visualization(results, "ttqc", 10, i)
+        # create_q_visualization(results, "ttqc", 14, i)
+        #
+        # create_q_visualization(results, "tqc", 1, i)
+        # create_q_visualization(results, "tqc", 2, i)
+        # create_q_visualization(results, "tqc", 3, i)
+        # create_q_visualization(results, "tqc", 4, i)
+        # create_q_visualization(results, "tqc", 6, i)
+        # create_q_visualization(results, "tqc", 10, i)
+        # create_q_visualization(results, "tqc", 14, i)
+        # create_q_visualization(results, "tqc", 14, i)
+        #
+        # create_q_visualization(results, "ndtop", -1.0, i)
+        # create_q_visualization(results, "ndtop", -0.7, i)
+        # create_q_visualization(results, "ndtop", -0.5, i)
+        # create_q_visualization(results, "ndtop", 0.0, i)
+        # create_q_visualization(results, "ndtop", 0.5, i)
+        # create_q_visualization(results, "ndtop", 1.0, i)
+        #
+        # create_q_visualization(results, "top", -1.0, i)
+        # create_q_visualization(results, "top", -0.7, i)
+        # create_q_visualization(results, "top", -0.5, i)
+        # create_q_visualization(results, "top", 0.0, i)
+        # create_q_visualization(results, "top", 0.5, i)
+        # create_q_visualization(results, "top", 1.0, i)
+        #
+        # create_q_visualization(results, "afu", 0.05, i)
+        # create_q_visualization(results, "afu", 0.1, i)
+        # create_q_visualization(results, "afu", 0.3, i)
+        # create_q_visualization(results, "afu", 0.5, i)
+        create_q_visualization(results, "afu", 0.7, i)
+        # create_q_visualization(results, "afu", 0.9, i)
+        # create_q_visualization(results, "afu", 0.95, i)
 
 
 if __name__ == "__main__":
