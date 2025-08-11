@@ -65,7 +65,7 @@ class MLP(nn.Module):
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         for hidden_dim in self.hidden_dims:
-            x = jax.nn.relu(
+            x = jax.nn.sigmoid(
                 nn.Dense(
                     hidden_dim,
                     kernel_init=jax.nn.initializers.he_uniform(),
@@ -927,22 +927,20 @@ def main() -> None:
 
     buffer_size = 50
 
-    avg_data = [1]
-    # avg_data = [1, 3, 5, 10, 20, 50]
-    # min_data = [2, 3, 4, 6, 8, 10]
-    # tqc_data = [1, 2, 3, 4, 6, 10, 14]
-    # top_data = [-1.0, -0.7, -0.5, 0.0, 0.5, 1.0]
-    # rho_data = [0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95]
-    rho_data = [0.7]
+    avg_data = [1, 3, 5, 10, 20, 50]
+    min_data = [2, 3, 4, 6, 8, 10]
+    tqc_data = [1, 2, 3, 4, 6, 10, 14]
+    top_data = [-1.0, -0.7, -0.5, 0.0, 0.5, 1.0]
+    rho_data = [0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95]
 
     experiments = list(
         itertools.chain(
             [("avg", n, create_avg_ensemble) for n in avg_data],
-            # [("min", n, create_min_ensemble) for n in min_data],
-            # [("tqc", n, create_tqc_ensemble) for n in tqc_data],
-            # [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
-            # [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
-            # [("top", beta, create_top_ensemble) for beta in top_data],
+            [("min", n, create_min_ensemble) for n in min_data],
+            [("tqc", n, create_tqc_ensemble) for n in tqc_data],
+            [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
+            [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
+            [("top", beta, create_top_ensemble) for beta in top_data],
             [("afu", rho, create_afu_ensemble) for rho in rho_data],
         )
     )
