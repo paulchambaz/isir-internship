@@ -105,8 +105,8 @@ class AFU(RLAlgo):
         self.gamma = gamma
         self.target_entropy = -float(action_dim)
 
-        self.q_network = self.QNetwork(hidden_dims=hidden_dims, num_critics=3)
-        self.v_network = self.VNetwork(hidden_dims=hidden_dims, num_critics=2)
+        self.q_network = self.QNetwork(hidden_dims=hidden_dims, num_critics=2)
+        self.v_network = self.VNetwork(hidden_dims=hidden_dims, num_critics=1)
         self.policy_network = self.PolicyNetwork(
             hidden_dims=hidden_dims, action_dim=action_dim
         )

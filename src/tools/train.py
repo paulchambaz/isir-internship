@@ -235,7 +235,7 @@ def main() -> None:
     gamma = 0.99
     alpha = None
     seed = 42
-    rho = 0.7
+    rho = 0.8
     n_critics = 1
     n_quantiles = 25
     quantiles_drop = -2
