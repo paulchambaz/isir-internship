@@ -25,7 +25,6 @@ visualize-action-critic *ARGS:
 compute-monte-carlo *ARGS:
   @uv run python -m tools.compute_monte_carlo {{ ARGS }}
 
-
 compute-tqc-figure *ARGS:
   @uv run python -m tools.compute_tqc_figure {{ ARGS }}
 
@@ -40,6 +39,9 @@ visualize-figure-critics *ARGS:
 
 visualize-bias *ARGS:
   @uv run python -m tools.visualize_bias {{ ARGS }}
+
+visualize-bias-parameter *ARGS:
+  @uv run python -m tools.visualize_bias_parameter {{ ARGS }}
 
 # Show available commands
 help:
