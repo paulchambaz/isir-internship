@@ -1,3 +1,11 @@
+# Copyright (C) 2025 Paul Chambaz
+# This file is part of isir-internship.
+#
+# isir-internship is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
 import argparse
 import pickle
 from pathlib import Path
@@ -148,7 +156,7 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    for i in tqdm(range(100, 25001, 100)):
+    for i in tqdm(range(100, 5001, 100)):
         create_q_visualization(results, "avg", 1, i)
         create_q_visualization(results, "avg", 3, i)
         create_q_visualization(results, "avg", 5, i)

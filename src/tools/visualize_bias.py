@@ -1,3 +1,11 @@
+# Copyright (C) 2025 Paul Chambaz
+# This file is part of isir-internship.
+#
+# isir-internship is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
 import argparse
 import pickle
 from itertools import chain
@@ -91,6 +99,9 @@ def display_graph(results: dict) -> None:
     fig, ax1 = plt.subplots(figsize=(12, 8))
     ax2 = ax1.twinx()
     for (method, n), value in results.items():
+        if not ((method == "avg" and n == 1) or method == "avg"):
+            continue
+
         metadata = value["metadata"]
         true_q = np.array(metadata["true_q"])
         mean_true_q = np.mean(true_q)
@@ -126,23 +137,27 @@ def display_graph(results: dict) -> None:
             corrected_bias, _, _ = stats(all_corrected_errors, 0.1, 0.9)
             corrected_biases.append(corrected_bias)
 
-        ax1.axhline(y=0, color="black", linewidth=2)
-        ax1.plot(
-            steps,
-            biases,
-            color=COLORS[(method, n)],
-            label=f"{method} n={n}",
-            linewidth=2,
-        )
-        ax1.fill_between(
-            steps, lows, highs, color=COLORS[(method, n)], alpha=0.2
-        )
+        ax1.axhline(y=0, color="black", linewidth=2, zorder=1)
+
         ax2.plot(
             steps,
             corrected_biases,
             color=COLORS[(method, n)],
             linestyle="--",
             linewidth=2,
+            zorder=3,
+        )
+
+        ax1.fill_between(
+            steps, lows, highs, color=COLORS[(method, n)], alpha=0.1, zorder=2
+        )
+        ax1.plot(
+            steps,
+            biases,
+            color=COLORS[(method, n)],
+            label=f"{method} n={n}",
+            linewidth=4,
+            zorder=4,
         )
 
     ax1.set_xlabel("Training step")

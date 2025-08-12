@@ -193,8 +193,7 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    # create_tqc_visualization(results, 25_000)
-    for i in tqdm(range(100, 25001, 100)):
+    for i in tqdm(range(100, 5001, 100)):
         create_tqc_visualization(results, i)
 
 
