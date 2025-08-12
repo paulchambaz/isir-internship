@@ -105,8 +105,8 @@ class AFU(RLAlgo):
         self.gamma = gamma
         self.target_entropy = -float(action_dim)
 
-        self.q_network = self.QNetwork(hidden_dims=hidden_dims, num_critics=2)
-        self.v_network = self.VNetwork(hidden_dims=hidden_dims, num_critics=1)
+        self.q_network = self.QNetwork(hidden_dims=hidden_dims, num_critics=3)
+        self.v_network = self.VNetwork(hidden_dims=hidden_dims, num_critics=2)
         self.policy_network = self.PolicyNetwork(
             hidden_dims=hidden_dims, action_dim=action_dim
         )
@@ -326,7 +326,7 @@ class AFU(RLAlgo):
         """Compute combined loss for Q and V networks with V-A constraints."""
 
         v_targets_list = self.v_network.apply(v_target_params, next_states)
-        v_targets = jnp.min(v_targets_list, axis=0)
+        v_targets = jnp.mean(v_targets_list, axis=0)
         q_targets = rewards + self.gamma * (1.0 - dones) * v_targets
 
         v_values = self.v_network.apply(v_params, states)
