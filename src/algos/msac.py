@@ -22,7 +22,7 @@ from .rl_algo import RLAlgo
 from .utils import se_loss
 
 
-class SAC(RLAlgo):
+class MSAC(RLAlgo):
     """
     Soft Actor-Critic (SAC) algorithm for continuous control tasks.
 
@@ -313,7 +313,7 @@ class SAC(RLAlgo):
         q_values_next_list = self.q_network.apply(
             q_target_params, next_states, next_actions
         )
-        q_values_next = jnp.min(q_values_next_list, axis=0)
+        q_values_next = jnp.mean(q_values_next_list, axis=0)
 
         alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
         targets = jax.lax.stop_gradient(
@@ -325,7 +325,7 @@ class SAC(RLAlgo):
 
         values = self.q_network.apply(q_params, states, actions)
         errors = se_loss(value=values, target=targets)
-        return jnp.mean(errors)
+        return jnp.mean(0.5 * (errors) ** 2)
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_policy(

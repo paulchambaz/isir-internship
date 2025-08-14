@@ -17,6 +17,7 @@ from .afu import AFU
 from .afup import AFUP
 from .afutqc2 import AFUTQC
 from .mlp import MLP
+from .msac import MSAC
 from .rl_algo import RLAlgo
 from .sac import SAC
 from .simple_right import SimpleRight
@@ -28,6 +29,7 @@ __all__ = [
     "AFUP",
     "AFUTQC",
     "MLP",
+    "MSAC",
     "SAC",
     "TQC",
     "Algo",

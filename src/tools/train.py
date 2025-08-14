@@ -182,7 +182,7 @@ def main() -> None:
     parser.add_argument(
         "--algo",
         type=str,
-        choices=["afu", "afup", "afutqc", "sac", "tqc"],
+        choices=["afu", "afup", "afutqc", "msac", "sac", "tqc"],
         required=True,
         help="Algorithms",
     )
@@ -246,6 +246,21 @@ def main() -> None:
 
     match args.algo:
         case "sac":
+            agent = algos.SAC(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                seed=seed,
+            )
+        case "msac":
             agent = algos.SAC(
                 state_dim=state_dim,
                 action_dim=action_dim,
@@ -339,7 +354,7 @@ def main() -> None:
         train_env=train_env,
         test_env=test_env,
         steps=args.steps,
-        warmup=10_000,
+        warmup=0,
         train_freq=4,
         gradient_steps=4,
         test_freq=500,
