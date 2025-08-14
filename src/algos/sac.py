@@ -84,6 +84,7 @@ class SAC(RLAlgo):
         tau: float,
         gamma: float,
         alpha: float | None,
+        n_critics: int,
         seed: int,
         state: dict | None = None,
     ) -> None:
@@ -96,7 +97,9 @@ class SAC(RLAlgo):
         self.gamma = gamma
         self.target_entropy = -float(action_dim)
 
-        self.q_network = self.QNetwork(hidden_dims=hidden_dims, num_critics=2)
+        self.q_network = self.QNetwork(
+            hidden_dims=hidden_dims, num_critics=n_critics
+        )
         self.policy_network = self.PolicyNetwork(
             hidden_dims=hidden_dims, action_dim=action_dim
         )

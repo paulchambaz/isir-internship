@@ -258,6 +258,7 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
+                n_critics=n_critics,
                 seed=seed,
             )
         case "msac":
@@ -273,6 +274,7 @@ def main() -> None:
                 tau=tau,
                 gamma=gamma,
                 alpha=alpha,
+                n_critics=n_critics,
                 seed=seed,
             )
         case "afu":
