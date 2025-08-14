@@ -240,7 +240,7 @@ def main() -> None:
     alpha = None
     seed = 42
     rho = 0.7
-    n_critics = 5
+    n_critics = 10
     n_quantiles = 25
     quantiles_drop = -2
 
