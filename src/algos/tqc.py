@@ -16,10 +16,10 @@ import numpy as np
 import optax
 from jax import random
 
-from .mlp import MLP
+from .networks import PolicyNetwork, ZNetwork
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
-from .utils import quantile_loss
+from .utils import quantile_loss, soft_update
 
 
 class TQC(RLAlgo):
@@ -81,12 +81,12 @@ class TQC(RLAlgo):
         self.gamma = gamma
         self.target_entropy = -float(action_dim)
 
-        self.z_network = self.ZNetwork(
+        self.z_network = ZNetwork(
             hidden_dims=hidden_dims,
             n_quantiles=n_quantiles,
             n_critics=n_critics,
         )
-        self.policy_network = self.PolicyNetwork(
+        self.policy_network = PolicyNetwork(
             hidden_dims=hidden_dims, action_dim=action_dim
         )
 
@@ -232,7 +232,7 @@ class TQC(RLAlgo):
                 )
             )
 
-        self.z_target_params = self._soft_update(
+        self.z_target_params = soft_update(
             self.z_target_params, self.z_params, self.tau
         )
 
@@ -454,18 +454,6 @@ class TQC(RLAlgo):
 
         return actions, log_probs
 
-    @partial(jax.jit, static_argnums=(0,))
-    def _soft_update(
-        self,
-        target_params: dict[str, any],
-        online_params: dict[str, any],
-        tau: float,
-    ) -> dict[str, any]:
-        """Perform soft update of target network parameters."""
-        return jax.tree.map(
-            lambda t, s: (1 - tau) * t + tau * s, target_params, online_params
-        )
-
     def get_state(self) -> dict[str, any]:
         """
         Returns a complete agent state dictionary including all network
@@ -508,46 +496,3 @@ class TQC(RLAlgo):
 
         if self.learn_temperature and "temperature_opt_state" in state:
             self.temperature_opt_state = state["temperature_opt_state"]
-
-    class ZNetwork(nn.Module):
-        """
-        Distributional critic network outputting quantiles for multiple critics.
-        """
-
-        hidden_dims: list[int]
-        n_quantiles: int
-        n_critics: int
-
-        @nn.compact
-        def __call__(
-            self, states: jnp.ndarray, actions: jnp.ndarray
-        ) -> jnp.ndarray:
-            states_actions = jnp.concatenate([states, actions], axis=1)
-
-            return jnp.stack(
-                [
-                    MLP(
-                        hidden_dims=self.hidden_dims,
-                        output_dim=self.n_quantiles,
-                    )(states_actions)
-                    for _ in range(self.n_critics)
-                ],
-                axis=1,
-            )
-
-    class PolicyNetwork(nn.Module):
-        """
-        Policy network that outputs action mean and log standard deviation.
-        """
-
-        hidden_dims: list[int]
-        action_dim: int
-
-        @nn.compact
-        def __call__(
-            self, states: jnp.ndarray
-        ) -> tuple[jnp.ndarray, jnp.ndarray]:
-            output = MLP(self.hidden_dims, 2 * self.action_dim)(states)
-            mean, log_std = jnp.split(output, 2, axis=1)
-            log_std = jnp.clip(log_std, -10, 2)
-            return mean, log_std

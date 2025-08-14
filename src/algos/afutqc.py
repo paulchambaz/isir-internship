@@ -16,7 +16,7 @@ import numpy as np
 import optax
 from jax import random
 
-from .mlp import MLP
+from .networks import PolicyNetwork, QNetwork, VNetwork
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
 from .utils import lerp, se_loss, soft_update, where
@@ -110,11 +110,11 @@ class AFUTQC(RLAlgo):
         self.n_quantiles = n_quantiles
         self.quantiles_drop = quantiles_drop
 
-        self.q_network = self.QNetwork(
+        self.q_network = QNetwork(
             hidden_dims=hidden_dims, output_dim=self.n_quantiles + 1
         )
-        self.v_network = self.VNetwork(hidden_dims=hidden_dims)
-        self.policy_network = self.PolicyNetwork(
+        self.v_network = VNetwork(hidden_dims=hidden_dims)
+        self.policy_network = PolicyNetwork(
             hidden_dims=hidden_dims, action_dim=action_dim
         )
 
@@ -567,49 +567,3 @@ class AFUTQC(RLAlgo):
 
         if self.learn_temperature and "temperature_opt_state" in state:
             self.temperature_opt_state = state["temperature_opt_state"]
-
-    class QNetwork(nn.Module):
-        """
-        Q-function network with multiple critic heads for value estimation.
-        """
-
-        hidden_dims: list[int]
-        output_dim: int
-
-        @nn.compact
-        def __call__(
-            self, states: jnp.ndarray, actions: jnp.ndarray
-        ) -> list[jnp.ndarray]:
-            states_actions = jnp.concatenate([states, actions], axis=1)
-            return MLP(
-                hidden_dims=self.hidden_dims, output_dim=self.output_dim
-            )(states_actions)
-
-    class VNetwork(nn.Module):
-        """
-        V-function network with multiple critic heads for state value
-        estimation.
-        """
-
-        hidden_dims: list[int]
-
-        @nn.compact
-        def __call__(self, states: jnp.ndarray) -> list[jnp.ndarray]:
-            return MLP(hidden_dims=self.hidden_dims, output_dim=1)(states)
-
-    class PolicyNetwork(nn.Module):
-        """
-        Policy network that outputs action mean and log standard deviation.
-        """
-
-        hidden_dims: list[int]
-        action_dim: int
-
-        @nn.compact
-        def __call__(
-            self, states: jnp.ndarray
-        ) -> tuple[jnp.ndarray, jnp.ndarray]:
-            output = MLP(self.hidden_dims, 2 * self.action_dim)(states)
-            mean, log_std = jnp.split(output, 2, axis=1)
-            log_std = jnp.clip(log_std, -10, 2)
-            return mean, log_std
