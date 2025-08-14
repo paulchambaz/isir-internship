@@ -28,6 +28,7 @@
             python313Packages.tkinter
             texlive.combined.scheme-full
             mujoco
+            swig
             imagemagick
 
             cudaPackages.cudatoolkit

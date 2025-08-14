@@ -12,7 +12,7 @@ authors = [{ name = "Paul Chambaz", email = "paul.chambaz@tutanota.com" }]
 dependencies = [
   "dm-haiku>=0.0.14",
   "flax>=0.10.6",
-  "gymnasium[classic-control,mujoco]>=1.1.1",
+  "gymnasium[box2d,classic-control,mujoco]>=1.1.1",
   "jax>=0.7.0",
   "matplotlib>=3.10.3",
   "networkx>=3.5",

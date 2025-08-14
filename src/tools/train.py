@@ -170,8 +170,12 @@ def main() -> None:
     seed = 42
 
     envs = {
-        "mountaincar": "MountainCarContinuous-v0",
-        "pendulum": "Pendulum-v1",
+        "mountaincar": {"name": "MountainCarContinuous-v0", "kwargs": {}},
+        "pendulum": {"name": "Pendulum-v1", "kwargs": {}},
+        "lunarlander": {
+            "name": "LunarLander-v3",
+            "kwargs": {"continuous": True},
+        },
     }
 
     parser = argparse.ArgumentParser(description="Test RL algorithms")
@@ -212,9 +216,9 @@ def main() -> None:
     if args.cpu:
         jax.config.update("jax_platform_name", "cpu")
 
-    env_name = envs[args.env]
-    train_env = gym.make(env_name)
-    test_env = gym.make(env_name)
+    env = envs[args.env]
+    train_env = gym.make(env["name"], **env["kwargs"])
+    test_env = gym.make(env["name"], **env["kwargs"])
 
     train_env.reset(seed=seed)
     test_env.reset(seed=seed + 1)
