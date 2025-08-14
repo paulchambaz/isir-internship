@@ -198,7 +198,7 @@ def main() -> None:
         "--steps",
         type=int,
         required=False,
-        default=100_000,
+        default=200_000,
         help="Max number of steps for the experiment",
     )
     parser.add_argument(
