@@ -19,6 +19,7 @@ from jax import random
 from .mlp import MLP
 from .replay import ReplayBuffer
 from .rl_algo import RLAlgo
+from .utils import quantile_loss
 
 
 class TQC(RLAlgo):
@@ -48,33 +49,6 @@ class TQC(RLAlgo):
         state: Optional pre-trained network state dictionary
     """
 
-    __slots__ = [
-        "action_dim",
-        "batch_size",
-        "buffer",
-        "gamma",
-        "key",
-        "learn_temperature",
-        "log_alpha",
-        "n_critics",
-        "n_quantiles",
-        "policy_network",
-        "policy_opt_state",
-        "policy_optimizer",
-        "policy_params",
-        "quantiles_drop",
-        "state_dim",
-        "target_entropy",
-        "tau",
-        "temperature_opt_state",
-        "temperature_optimizer",
-        "z_network",
-        "z_opt_state",
-        "z_optimizer",
-        "z_params",
-        "z_target_params",
-    ]
-
     def __init__(
         self,
         state_dim: int,
@@ -101,6 +75,7 @@ class TQC(RLAlgo):
         self.n_quantiles = n_quantiles
         self.n_critics = n_critics
         self.quantiles_drop = quantiles_drop
+        self.total_kept = n_critics * (n_quantiles - abs(quantiles_drop))
         self.batch_size = batch_size
         self.tau = tau
         self.gamma = gamma
@@ -117,8 +92,8 @@ class TQC(RLAlgo):
 
         self.key, z_key, policy_key = random.split(self.key, 3)
 
-        dummy_state = jnp.zeros((1, state_dim))  # [1, state_dim]
-        dummy_action = jnp.zeros((1, action_dim))  # [1, action_dim]
+        dummy_state = jnp.zeros((1, state_dim))
+        dummy_action = jnp.zeros((1, action_dim))
 
         self.z_params = self.z_network.init(z_key, dummy_state, dummy_action)
         self.z_target_params = self.z_params
@@ -126,9 +101,9 @@ class TQC(RLAlgo):
 
         self.learn_temperature = alpha is None
         if self.learn_temperature:
-            self.log_alpha = jnp.array(0, dtype=jnp.float32)  # []
+            self.log_alpha = jnp.array(0, dtype=jnp.float32)
         else:
-            self.log_alpha = jnp.log(jnp.array(alpha, dtype=jnp.float32))  # []
+            self.log_alpha = jnp.log(jnp.array(alpha, dtype=jnp.float32))
 
         self.z_optimizer = optax.adam(critic_lr)
         self.policy_optimizer = optax.adam(policy_lr)
@@ -157,29 +132,23 @@ class TQC(RLAlgo):
             state: Current environment state observation
             evaluation: Whether to use deterministic or stochastic
         """
-        jax_state = state[None, ...]  # [1, state_dim]
+        jax_state = state[None, ...]
 
         if evaluation:
-            action = self._exploit(
-                self.policy_params, jax_state
-            )  # [1, action_dim]
+            action = self._exploit(self.policy_params, jax_state)
         else:
             self.key, action_key = random.split(self.key)
-            action = self._explore(
-                self.policy_params, jax_state, action_key
-            )  # [1, action_dim]
+            action = self._explore(self.policy_params, jax_state, action_key)
 
-        return np.array(action[0])  # [action_dim]
+        return np.array(action[0])
 
     @partial(jax.jit, static_argnums=(0,))
     def _exploit(
         self, policy_params: dict[str, any], state: jnp.ndarray
     ) -> jnp.ndarray:
         """Select deterministic action using policy mean."""
-        mean, _ = self.policy_network.apply(
-            policy_params, state
-        )  # [batch_size, action_dim]
-        return jnp.tanh(mean)  # [batch_size, action_dim]
+        mean, _ = self.policy_network.apply(policy_params, state)
+        return jnp.tanh(mean)
 
     @partial(jax.jit, static_argnums=(0,))
     def _explore(
@@ -189,12 +158,10 @@ class TQC(RLAlgo):
         key: jnp.ndarray,
     ) -> jnp.ndarray:
         """Sample stochastic action from policy distribution."""
-        mean, log_std = self.policy_network.apply(
-            policy_params, state
-        )  # [batch_size, action_dim], [batch_size, action_dim]
-        noise = random.normal(key, mean.shape)  # [batch_size, action_dim]
-        raw_action = mean + noise * jnp.exp(log_std)  # [batch_size, action_dim]
-        return jnp.tanh(raw_action)  # [batch_size, action_dim]
+        mean, log_std = self.policy_network.apply(policy_params, state)
+        noise = random.normal(key, mean.shape)
+        raw_action = mean + noise * jnp.exp(log_std)
+        return jnp.tanh(raw_action)
 
     def push_buffer(
         self,
@@ -286,7 +253,7 @@ class TQC(RLAlgo):
     ) -> tuple[dict[str, jax.Array], optax.OptState]:
         """Update Z-network parameters using computed gradients."""
 
-        z_grad = jax.grad(self._compute_z_loss)(
+        z_grad = jax.grad(self._compute_critic_loss)(
             z_params,
             z_target_params=z_target_params,
             policy_params=policy_params,
@@ -307,7 +274,7 @@ class TQC(RLAlgo):
         return new_z_params, new_z_opt_state
 
     @partial(jax.jit, static_argnums=(0,))
-    def _compute_z_loss(
+    def _compute_critic_loss(
         self,
         z_params: dict[str, any],
         z_target_params: dict[str, any],
@@ -324,7 +291,7 @@ class TQC(RLAlgo):
         Compute Z-network loss using quantile regression with truncated targets.
         """
 
-        z_targets = self._compute_z_targets(
+        targets = self._compute_targets(
             z_target_params,
             policy_params,
             log_alpha,
@@ -332,15 +299,14 @@ class TQC(RLAlgo):
             next_states,
             dones,
             key,
-        )  # [batch_size, n_kept_quantiles]
-        z_values = self.z_network.apply(
-            z_params, states, actions
-        )  # [batch_size, n_critics, n_quantiles]
+        )
 
-        return self._quantile_regression_loss(z_values, z_targets)  # []
+        values = self.z_network.apply(z_params, states, actions)
+        errors = quantile_loss(value=values, target=targets)
+        return jnp.mean(errors)
 
     @partial(jax.jit, static_argnums=(0,))
-    def _compute_z_targets(
+    def _compute_targets(
         self,
         z_target_params: dict[str, any],
         policy_params: dict[str, any],
@@ -353,95 +319,27 @@ class TQC(RLAlgo):
         """Compute truncated quantile targets."""
         next_actions, next_log_probs = self._compute_action_and_log_prob(
             policy_params, next_states, key
-        )  # [batch_size, action_dim], [batch_size, 1]
+        )
 
-        z_next_values = self.z_network.apply(
+        quantiles = self.z_network.apply(
             z_target_params, next_states, next_actions
-        )  # [batch_size, n_critics, n_quantiles]
-        truncated_quantiles = self._truncate(
-            z_next_values
-        )  # [batch_size, n_kept_quantiles]
+        )
 
-        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))  # []
-        targets = rewards.reshape(-1, 1) + self.gamma * (
-            1.0 - dones.reshape(-1, 1)
-        ) * (
-            truncated_quantiles - alpha * next_log_probs
-        )  # [batch_size, n_kept_quantiles]
-
-        return jax.lax.stop_gradient(targets)
-
-    @partial(jax.jit, static_argnums=(0,))
-    def _truncate(self, quantiles: jnp.ndarray) -> jnp.ndarray:
-        batch_size = quantiles.shape[0]
-        all_quantiles = quantiles.reshape(
-            batch_size, -1
-        )  # [batch_size, n_critics * n_quantiles]
-        sorted_quantiles = jnp.sort(
-            all_quantiles, axis=1
-        )  # [batch_size, n_critics * n_quantiles]
-
-        n_drop = abs(self.quantiles_drop)
-        n_total = self.n_critics * self.n_quantiles
-        n_kept = n_total - n_drop
-
-        return jax.lax.cond(
+        union_quantiles = quantiles.reshape(next_actions.shape[0], -1)
+        sorted_quantiles = jnp.sort(union_quantiles, axis=-1)
+        truncated_quantiles = jax.lax.cond(
             self.quantiles_drop <= 0,
-            lambda x: x[:, n_drop:],
-            lambda x: x[:, :n_kept],
+            lambda x: x[:, : self.total_kept],  # pessimistic
+            lambda x: x[:, -self.total_kept :],  # optimistic
             sorted_quantiles,
         )
 
-    @partial(jax.jit, static_argnums=(0,))
-    def _quantile_regression_loss(
-        self, z_values: jnp.ndarray, z_targets: jnp.ndarray
-    ) -> jnp.ndarray:
-        """Compute quantile regression with Huber loss."""
-        tau = jnp.linspace(
-            1 / (2 * self.n_quantiles),
-            1 - 1 / (2 * self.n_quantiles),
-            self.n_quantiles,
-        )  # [n_quantiles]
+        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
+        target = rewards + self.gamma * (1.0 - dones) * (
+            truncated_quantiles - alpha * next_log_probs
+        )
 
-        z_values_expanded = jnp.expand_dims(
-            z_values, axis=-1
-        )  # [batch_size, n_critics, n_quantiles, 1]
-        z_targets_expanded = jnp.expand_dims(
-            z_targets, axis=(1, 2)
-        )  # [batch_size, 1, 1, n_kept_quantiles]
-        tau_expanded = jnp.expand_dims(
-            tau, axis=(0, 1, 3)
-        )  # [1, 1, n_quantiles, 1]
-
-        diff = (
-            z_targets_expanded - z_values_expanded
-        )  # [batch_size, n_critics, n_quantiles, n_kept_quantiles]
-        huber_loss = self._huber_loss(
-            diff, delta=1.0
-        )  # [batch_size, n_critics, n_quantiles, n_kept_quantiles]
-        weights = jnp.abs(
-            tau_expanded - (diff < 0)
-        )  # [batch_size, n_critics, n_quantiles, n_kept_quantiles]
-
-        loss_per_quantile = (weights * huber_loss).sum(axis=-1)
-
-        normalization = self.n_quantiles * z_targets.shape[-1]
-
-        errors = loss_per_quantile / normalization
-        return errors.mean()
-
-    @partial(jax.jit, static_argnums=(0,))
-    def _huber_loss(self, errors: jnp.ndarray, delta: float) -> jnp.ndarray:
-        """Compute Huber loss."""
-        abs_errors = jnp.abs(
-            errors
-        )  # [batch_size, n_critics, n_quantiles, n_kept_quantiles]
-
-        return jnp.where(
-            abs_errors <= delta,
-            0.5 * jnp.square(errors),
-            delta * abs_errors - 0.5 * delta**2,
-        )  # [batch_size, n_critics, n_quantiles, n_kept_quantiles]
+        return jax.lax.stop_gradient(target)
 
     @partial(jax.jit, static_argnums=(0,))
     def _update_policy(
@@ -484,19 +382,17 @@ class TQC(RLAlgo):
 
         actions, log_probs = self._compute_action_and_log_prob(
             policy_params, states, key
-        )  # [batch_size, action_dim], [batch_size, 1]
+        )
 
-        z_values = self.z_network.apply(
-            z_params, states, actions
-        )  # [batch_size, n_critics, n_quantiles]
-        q_values = z_values.mean(axis=(1, 2))  # [batch_size]
+        z_values = self.z_network.apply(z_params, states, actions)
+        q_values = z_values.mean(axis=(1, 2))
 
-        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))  # []
+        alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
 
-        mean_log_probs = log_probs.mean()  # []
-        mean_q_values = q_values.mean()  # []
+        mean_log_probs = log_probs.mean()
+        mean_q_values = q_values.mean()
 
-        policy_loss = alpha * mean_log_probs - mean_q_values  # []
+        policy_loss = alpha * mean_log_probs - mean_q_values
 
         return policy_loss, jax.lax.stop_gradient(mean_log_probs)
 
@@ -530,7 +426,7 @@ class TQC(RLAlgo):
     ) -> jnp.ndarray:
         """Compute temperature loss for automatic entropy tuning."""
 
-        return -log_alpha * (self.target_entropy + mean_log_probs)  # []
+        return -log_alpha * (self.target_entropy + mean_log_probs)
 
     @partial(jax.jit, static_argnums=(0,))
     def _compute_action_and_log_prob(
@@ -540,27 +436,21 @@ class TQC(RLAlgo):
         key: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Sample actions and compute log probabilities."""
-        means, log_stds = self.policy_network.apply(
-            policy_params, states
-        )  # [batch_size, action_dim], [batch_size, action_dim]
+        means, log_stds = self.policy_network.apply(policy_params, states)
 
-        noise = random.normal(key, means.shape)  # [batch_size, action_dim]
-        raw_actions = means + noise * jnp.exp(
-            log_stds
-        )  # [batch_size, action_dim]
+        noise = random.normal(key, means.shape)
+        raw_actions = means + noise * jnp.exp(log_stds)
 
-        actions = jnp.tanh(raw_actions)  # [batch_size, action_dim]
+        actions = jnp.tanh(raw_actions)
 
         gaussian_log_probs = -0.5 * (
             jnp.square(noise) + 2 * log_stds + jnp.log(2 * math.pi)
-        )  # [batch_size, action_dim]
+        )
 
-        tanh_corrections = jnp.log(
-            nn.relu(1.0 - jnp.square(actions)) + 1e-6
-        )  # [batch_size, action_dim]
+        tanh_corrections = jnp.log(nn.relu(1.0 - jnp.square(actions)) + 1e-6)
         log_probs = (gaussian_log_probs - tanh_corrections).sum(
             axis=1, keepdims=True
-        )  # [batch_size, 1]
+        )
 
         return actions, log_probs
 

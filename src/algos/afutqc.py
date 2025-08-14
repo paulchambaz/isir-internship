@@ -323,7 +323,7 @@ class AFUTQC(RLAlgo):
 
         return new_q_params, new_v_params, new_q_opt_state, new_v_opt_state
 
-    # @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=(0,))
     def _compute_critic_loss(
         self,
         q_params: dict[str, any],
@@ -343,26 +343,17 @@ class AFUTQC(RLAlgo):
         a_values = -q_values_list[..., :1]
         v_values = self.v_network.apply(v_params, states)
 
-        print(f"{q_values_list=}")
-        print(f"{q_values=}")
-        print(f"{a_values=}")
-        print(f"{v_values=}")
-
         q_loss = self._compute_q_loss(
             v_target_params, q_values, rewards, next_states, dones
         )
-
-        print(f"{q_loss=}")
 
         va_loss = self._compute_va_loss(
             q_target_params, v_values, a_values, states, actions
         )
 
-        print(f"{va_loss=}")
-
         return va_loss + q_loss
 
-    # @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=(0,))
     def _compute_va_loss(
         self,
         q_target_params: dict[str, any],
@@ -375,14 +366,6 @@ class AFUTQC(RLAlgo):
         q_quantiles = jax.lax.stop_gradient(q_targets_list[..., 1:])
         q_truncated_quantiles = self._truncate(q_quantiles, self.quantiles_drop)
         q_targets = q_truncated_quantiles.mean(axis=1, keepdims=True)
-
-        print("compute va loss")
-        print(f"{q_targets_list=}")
-        print(f"{q_quantiles=}")
-        print(f"{q_truncated_quantiles=}")
-        print(f"{q_targets=}")
-        print(f"{a_values=}")
-        print(f"{v_values=}")
 
         # applies downward pressure to value gradient
         upsilon_values = where(
@@ -407,7 +390,7 @@ class AFUTQC(RLAlgo):
 
         return z_values.mean()
 
-    # @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=(0,))
     def _truncate(self, quantiles: jnp.ndarray, drop: int) -> jnp.ndarray:
         n_drop = abs(drop)
         n_kept = self.n_quantiles - n_drop
@@ -421,7 +404,7 @@ class AFUTQC(RLAlgo):
             sorted_quantiles,
         )
 
-    # @partial(jax.jit, static_argnums=(0,))
+    @partial(jax.jit, static_argnums=(0,))
     def _compute_q_loss(
         self,
         v_target_params: dict[str, any],
@@ -434,11 +417,6 @@ class AFUTQC(RLAlgo):
         q_targets = jax.lax.stop_gradient(
             rewards + self.gamma * (1.0 - dones) * v_next_targets
         )
-
-        print("compute q loss")
-        print(f"{v_next_targets=}")
-        print(f"{q_targets=}")
-        print(f"{q_values=}")
 
         errors = se_loss(value=q_values, target=q_targets)
         return errors.mean()
