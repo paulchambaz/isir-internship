@@ -182,7 +182,7 @@ def main() -> None:
     parser.add_argument(
         "--algo",
         type=str,
-        choices=["afu", "afup", "afutqc", "msac", "sac", "tqc"],
+        choices=["afu", "afup", "afutqc", "msac", "sac", "tqc", "top", "ndtop"],
         required=True,
         help="Algorithms",
     )
@@ -243,6 +243,7 @@ def main() -> None:
     n_critics = 2
     n_quantiles = 25
     quantiles_drop = -2
+    beta = -1.0
 
     match args.algo:
         case "sac":
@@ -344,6 +345,24 @@ def main() -> None:
                 n_quantiles=n_quantiles,
                 n_critics=n_critics,
                 quantiles_drop=quantiles_drop,
+                seed=seed,
+            )
+        case "top":
+            agent = algos.TOP(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                n_quantiles=n_quantiles,
+                n_critics=n_critics,
+                beta=beta,
                 seed=seed,
             )
         case _:

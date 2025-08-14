@@ -21,6 +21,7 @@ from .msac import MSAC
 from .rl_algo import RLAlgo
 from .sac import SAC
 from .simple_right import SimpleRight
+from .top import TOP
 from .tqc import TQC
 
 __all__ = [
@@ -31,6 +32,7 @@ __all__ = [
     "MLP",
     "MSAC",
     "SAC",
+    "TOP",
     "TQC",
     "Algo",
     "RLAlgo",
