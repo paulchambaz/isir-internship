@@ -209,6 +209,36 @@ def main() -> None:
         help="Number of runs for the experiment",
     )
     parser.add_argument(
+        "--n",
+        type=int,
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--m",
+        type=int,
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--d",
+        type=int,
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--b",
+        type=float,
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
+        "--r",
+        type=float,
+        required=False,
+        default=None,
+    )
+    parser.add_argument(
         "--gpu", action="store_true", help="Force JAX to use GPU instead of CPU"
     )
     args = parser.parse_args()
@@ -239,11 +269,11 @@ def main() -> None:
     gamma = 0.99
     alpha = None
     seed = 42
-    rho = 0.7
-    n_critics = 2
-    n_quantiles = 25
-    quantiles_drop = -0
-    beta = 0.5
+    rho = args.r if args.r else 0.7
+    n_critics = args.n if args.n else 2
+    n_quantiles = args.m if args.m else 25
+    quantiles_drop = -args.d if args.d else -2
+    beta = args.b if args.b else -1.0
 
     match args.algo:
         case "sac":
@@ -292,6 +322,7 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 rho=rho,
+                n_critics=n_critics,
                 seed=seed,
             )
         case "afutqc":

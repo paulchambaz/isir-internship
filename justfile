@@ -48,6 +48,57 @@ organize ENV ALGO:
   @uv run python -m tools.merge --input ~/down/agent_history_0.pk ~/down/agent_history_1.pk --output ./outputs/figure/{{ ENV }}/{{ ALGO }}_agent.pt
   @ls -lh outputs/figure/{{ ENV }}
 
+training ENV ALGO *ARGS:
+  @echo ./outputs/{{ ENV }}/{{ ALGO }}/$(echo {{ ARGS }} | sed 's/--//g' | sed 's/ //g')
+
+training-msac ENV:
+  @just training {{ ENV }} msac --n 1
+  @just training {{ ENV }} msac --n 3
+  @just training {{ ENV }} msac --n 5
+  @just training {{ ENV }} msac --n 10
+
+training-sac ENV:
+  @just training {{ ENV }} sac --n 2
+  @just training {{ ENV }} sac --n 3
+  @just training {{ ENV }} sac --n 5
+  @just training {{ ENV }} sac --n 8
+
+training-ttqc ENV:
+  @just training {{ ENV }} tqc --n 1 --m 25 --d 1
+  @just training {{ ENV }} tqc --n 1 --m 25 --d 2
+  @just training {{ ENV }} tqc --n 1 --m 25 --d 3
+  @just training {{ ENV }} tqc --n 1 --m 25 --d 5
+
+training-tqc ENV:
+  @just training {{ ENV }} tqc --n 2 --m 25 --d 1
+  @just training {{ ENV }} tqc --n 2 --m 25 --d 2
+  @just training {{ ENV }} tqc --n 2 --m 25 --d 3
+  @just training {{ ENV }} tqc --n 2 --m 25 --d 5
+
+training-top ENV:
+  @just training {{ ENV }} top --n 2 --m 25 --b -1.0
+  @just training {{ ENV }} top --n 2 --m 25 --b -0.5
+  @just training {{ ENV }} top --n 2 --m 25 --b 0.0
+  @just training {{ ENV }} top --n 2 --m 25 --b 0.5
+
+training-ndtop ENV:
+  @just training {{ ENV }} ndtop --n 2 --b -1.0
+  @just training {{ ENV }} ndtop --n 2 --b -0.5
+  @just training {{ ENV }} ndtop --n 2 --b 0.0
+  @just training {{ ENV }} ndtop --n 2 --b 0.5
+
+training-afu ENV:
+  @just training {{ ENV }} afu --n 2 --r 0.2
+  @just training {{ ENV }} afu --n 2 --r 0.4
+  @just training {{ ENV }} afu --n 2 --r 0.6
+  @just training {{ ENV }} afu --n 2 --r 0.8
+
+training-tafu ENV:
+  @just training {{ ENV }} afu --n 1 --r 0.2
+  @just training {{ ENV }} afu --n 1 --r 0.4
+  @just training {{ ENV }} afu --n 1 --r 0.6
+  @just training {{ ENV }} afu --n 1 --r 0.8
+
 # Show available commands
 help:
   @just --list
