@@ -243,7 +243,7 @@ def main() -> None:
     rho = 0.7
     n_critics = 2
     n_quantiles = 25
-    quantiles_drop = -3
+    quantiles_drop = -5
     beta = -1.0
 
     match args.algo:
