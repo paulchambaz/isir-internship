@@ -214,7 +214,6 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.gpu:
-        print("using cpu")
         jax.config.update("jax_platform_name", "cpu")
 
     env = envs[args.env]
@@ -241,7 +240,7 @@ def main() -> None:
     alpha = None
     seed = 42
     rho = 0.7
-    n_critics = 1
+    n_critics = 2
     n_quantiles = 25
     quantiles_drop = -0
     beta = -1.0
@@ -362,6 +361,23 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 n_quantiles=n_quantiles,
+                n_critics=n_critics,
+                beta=beta,
+                seed=seed,
+            )
+        case "ndtop":
+            agent = algos.NDTOP(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
                 n_critics=n_critics,
                 beta=beta,
                 seed=seed,

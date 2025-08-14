@@ -18,6 +18,7 @@ from .afup import AFUP
 from .afutqc2 import AFUTQC
 from .mlp import MLP
 from .msac import MSAC
+from .ndtop import NDTOP
 from .rl_algo import RLAlgo
 from .sac import SAC
 from .simple_right import SimpleRight
