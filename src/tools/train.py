@@ -241,9 +241,9 @@ def main() -> None:
     alpha = None
     seed = 42
     rho = 0.7
-    n_critics = 1
+    n_critics = 2
     n_quantiles = 25
-    quantiles_drop = -5
+    quantiles_drop = -1
     beta = -1.0
 
     match args.algo:
