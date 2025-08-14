@@ -209,11 +209,11 @@ def main() -> None:
         help="Number of runs for the experiment",
     )
     parser.add_argument(
-        "--cpu", action="store_true", help="Force JAX to use CPU instead of GPU"
+        "--gpu", action="store_true", help="Force JAX to use GPU instead of CPU"
     )
     args = parser.parse_args()
 
-    if args.cpu:
+    if not args.gpu:
         jax.config.update("jax_platform_name", "cpu")
 
     env = envs[args.env]
