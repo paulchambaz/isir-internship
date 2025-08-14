@@ -214,6 +214,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.gpu:
+        print("using cpu")
         jax.config.update("jax_platform_name", "cpu")
 
     env = envs[args.env]
