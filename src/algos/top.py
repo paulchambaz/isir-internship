@@ -298,13 +298,9 @@ class TOP(RLAlgo):
             z_target_params, next_states, next_actions
         )
 
-        print(f"{quantiles=}")
-        mean_quantiles = jnp.mean(quantiles, axis=(1, 2), keepdims=True)
-        print(f"{mean_quantiles=}")
-        std_quantiles = jnp.std(quantiles, axis=(1, 2), keepdims=True)
-        print(f"{std_quantiles=}")
+        mean_quantiles = jnp.mean(quantiles, axis=1)
+        std_quantiles = jnp.std(quantiles, axis=1)
         belief_quantiles = mean_quantiles + self.beta * std_quantiles
-        print(f"{belief_quantiles=}")
 
         alpha = jax.lax.stop_gradient(jnp.exp(log_alpha))
         target = rewards + self.gamma * (1.0 - dones) * (
