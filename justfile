@@ -49,7 +49,9 @@ organize ENV ALGO:
   @ls -lh outputs/figure/{{ ENV }}
 
 training ENV ALGO *ARGS:
-  @echo ./outputs/{{ ENV }}/{{ ALGO }}/$(echo {{ ARGS }} | sed 's/--//g' | sed 's/ //g')
+  just train --env {{ ENV }} --algo {{ ALGO }} {{ PARAMS }}
+  mkdir -p ./outputs/{{ ENV }}/{{ ALGO }}/$(echo {{ ARGS }} | sed 's/--//g' | sed 's/ //g')
+  mv ./outputs/agent_history_*.pk  ./outputs/history.pk ./outputs/{{ ENV }}/{{ ALGO }}/$(echo {{ ARGS }} | sed 's/--//g' | sed 's/ //g')
 
 training-msac ENV:
   @just training {{ ENV }} msac --n 1
