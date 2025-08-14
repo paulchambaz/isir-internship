@@ -243,7 +243,7 @@ def main() -> None:
     n_critics = 2
     n_quantiles = 25
     quantiles_drop = -0
-    beta = -0.5
+    beta = 0.0
 
     match args.algo:
         case "sac":
