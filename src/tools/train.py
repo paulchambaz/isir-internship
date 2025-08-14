@@ -198,7 +198,7 @@ def main() -> None:
         "--steps",
         type=int,
         required=False,
-        default=200_000,
+        default=100_000,
         help="Max number of steps for the experiment",
     )
     parser.add_argument(
@@ -293,7 +293,7 @@ def main() -> None:
                 seed=seed,
             )
         case "msac":
-            agent = algos.SAC(
+            agent = algos.MSAC(
                 state_dim=state_dim,
                 action_dim=action_dim,
                 hidden_dims=hidden_dims,
