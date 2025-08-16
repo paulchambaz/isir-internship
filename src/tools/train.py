@@ -266,7 +266,7 @@ def main() -> None:
     batch_size = 256
     lr = 3e-4
     tau = 0.005
-    gamma = 0.99
+    gamma = 0.9999
     alpha = None
     seed = 42
     rho = args.r if args.r else 0.7
