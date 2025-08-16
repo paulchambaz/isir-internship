@@ -170,13 +170,26 @@ def main() -> None:
     seed = 42
 
     envs = {
-        "mountaincar": {"name": "MountainCarContinuous-v0", "kwargs": {}},
-        "pendulum": {"name": "Pendulum-v1", "kwargs": {}},
+        "mountaincar": {
+            "name": "MountainCarContinuous-v0",
+            "kwargs": {},
+            "steps": 100_000,
+        },
+        "pendulum": {
+            "name": "Pendulum-v1",
+            "kwargs": {},
+            "steps": 200_000,
+        },
         "lunarlander": {
             "name": "LunarLander-v3",
             "kwargs": {"continuous": True},
+            "steps": 200_000,
         },
-        "swimmer": {"name": "Swimmer-v5", "kwargs": {}},
+        "swimmer": {
+            "name": "Swimmer-v5",
+            "kwargs": {},
+            "steps": 400_000,
+        },
     }
 
     parser = argparse.ArgumentParser(description="Test RL algorithms")
@@ -199,7 +212,6 @@ def main() -> None:
         "--steps",
         type=int,
         required=False,
-        default=400_000,
         help="Max number of steps for the experiment",
     )
     parser.add_argument(
@@ -259,6 +271,8 @@ def main() -> None:
 
     test_env.action_space.seed(seed + 1)
     test_env.observation_space.seed(seed + 1)
+
+    steps = args.steps if args.steps else env["steps"]
 
     action_dim = train_env.action_space.shape[0]
     state_dim = train_env.observation_space.shape[0]
@@ -423,7 +437,7 @@ def main() -> None:
         agent=agent,
         train_env=train_env,
         test_env=test_env,
-        steps=args.steps,
+        steps=steps,
         warmup=10_000,
         train_freq=4,
         gradient_steps=4,
