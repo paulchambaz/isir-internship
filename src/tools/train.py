@@ -176,6 +176,7 @@ def main() -> None:
             "name": "LunarLander-v3",
             "kwargs": {"continuous": True},
         },
+        "swimmer": {"name": "Swimmer-v5"},
     }
 
     parser = argparse.ArgumentParser(description="Test RL algorithms")
