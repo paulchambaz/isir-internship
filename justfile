@@ -53,6 +53,46 @@ training ENV ALGO *ARGS:
   mkdir -p ./outputs/{{ ENV }}/{{ ALGO }}/$(echo {{ ARGS }} | sed 's/--//g' | sed 's/ //g')
   mv ./outputs/agent_history_*.pk  ./outputs/history.pk ./outputs/{{ ENV }}/{{ ALGO }}/$(echo {{ ARGS }} | sed 's/--//g' | sed 's/ //g')
 
+train-mountaincar:
+  just training-msac mountaincar
+  just training-sac mountaincar
+  just training-ttqc mountaincar
+  just training-tqc mountaincar
+  just training-top mountaincar
+  just training-ndtop mountaincar
+  just training-afu mountaincar
+  just training-tafu mountaincar
+
+train-pendulum:
+  just training-msac pendulum
+  just training-sac pendulum
+  just training-ttqc pendulum
+  just training-tqc pendulum
+  just training-top pendulum
+  just training-ndtop pendulum
+  just training-afu pendulum
+  just training-tafu pendulum
+
+train-lunarlander:
+  just training-msac lunarlander
+  just training-sac lunarlander
+  just training-ttqc lunarlander
+  just training-tqc lunarlander
+  just training-top lunarlander
+  just training-ndtop lunarlander
+  just training-afu lunarlander
+  just training-tafu lunarlander
+
+train-swimmer:
+  just training-msac swimmer
+  just training-sac swimmer
+  just training-ttqc swimmer
+  just training-tqc swimmer
+  just training-top swimmer
+  just training-ndtop swimmer
+  just training-afu swimmer
+  just training-tafu swimmer
+
 training-msac ENV:
   @just training {{ ENV }} msac --n 1
   @just training {{ ENV }} msac --n 3
