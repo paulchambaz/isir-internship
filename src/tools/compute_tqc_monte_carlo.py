@@ -68,7 +68,7 @@ def get_args(args: argparse) -> tuple[str, int, int, int, float, float]:
     m = d = b = r = None
     match args.method:
         case "msac":
-            algo = "sac"
+            algo = "msac"
             n = int(args.n)
         case "sac":
             algo = "sac"

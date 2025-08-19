@@ -133,6 +133,33 @@ class NDTOP(RLAlgo):
         raw_action = mean + noise * jnp.exp(log_std)
         return jnp.tanh(raw_action)
 
+    def evaluate(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+        """
+        Evaluates the Q-values for a given state-action pair using the current
+        critic network(s). Use this method to assess how valuable the critic
+        considers a specific action in a given state.
+
+        Args:
+            state: Current environment state observation
+            action: Action to evaluate in the given state
+        """
+        jax_state = state[None, ...]
+        jax_action = action[None, ...]
+        value = self._compute_critic(self.q_params, jax_state, jax_action)
+        return value.squeeze(-1).squeeze(-1)
+
+    @partial(jax.jit, static_argnums=(0,))
+    def _compute_critic(
+        self, q_params: dict, states: np.ndarray, actions: np.ndarray
+    ) -> np.ndarray:
+        q_values = self.q_network.apply(q_params, states, actions)
+
+        mean_q = jnp.mean(q_values, axis=1)
+        std_q = jnp.mean(q_values, axis=1)
+        belief_q = mean_q + self.beta * std_q
+
+        return jnp.mean(belief_q, axis=0, keepdims=True)
+
     def push_buffer(
         self,
         state: np.ndarray,
