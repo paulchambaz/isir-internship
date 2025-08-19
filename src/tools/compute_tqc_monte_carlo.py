@@ -147,10 +147,14 @@ def main() -> None:
 
     results = defaultdict(dict)
 
-    progress = tqdm(data.items())
+    progress = tqdm(data.keys())
+    total_steps = max(data.keys()) * 500
 
     for k, value in data.items():
         step = k * 500
+        progress.set_description(
+            f"Running ({args.method} n={args.n}), step={step}/{total_steps}"
+        )
 
         action_dim = test_env.action_space.shape[0]
         state_dim = test_env.observation_space.shape[0]
