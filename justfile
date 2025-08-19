@@ -143,10 +143,10 @@ training-msac ENV:
   @just training {{ ENV }} msac --n 10
 
 simulate-msac ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/msac/n1 --env {{ ENV }} --method msac --n 1
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/msac/n3 --env {{ ENV }} --method msac --n 3
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/msac/n5 --env {{ ENV }} --method msac --n 5
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/msac/n10 --env {{ ENV }} --method msac --n 10
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/msac/n1 --env {{ ENV }} --method msac --n 1
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/msac/n3 --env {{ ENV }} --method msac --n 3
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/msac/n5 --env {{ ENV }} --method msac --n 5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/msac/n10 --env {{ ENV }} --method msac --n 10
 
 training-sac ENV:
   @just training {{ ENV }} sac --n 2
@@ -155,10 +155,10 @@ training-sac ENV:
   @just training {{ ENV }} sac --n 8
 
 simulate-sac ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/sac/n2 --env {{ ENV }} --method sac --n 2
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/sac/n3 --env {{ ENV }} --method sac --n 3
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/sac/n5 --env {{ ENV }} --method sac --n 5
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/sac/n8 --env {{ ENV }} --method sac --n 8
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/sac/n2 --env {{ ENV }} --method sac --n 2
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/sac/n3 --env {{ ENV }} --method sac --n 3
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/sac/n5 --env {{ ENV }} --method sac --n 5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/sac/n8 --env {{ ENV }} --method sac --n 8
 
 training-ttqc ENV:
   @just training {{ ENV }} tqc --n 1 --m 25 --d 1
@@ -167,10 +167,10 @@ training-ttqc ENV:
   @just training {{ ENV }} tqc --n 1 --m 25 --d 5
 
 simulate-ttqc ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d1 --env {{ ENV }} --method ttqc --n 1
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d2 --env {{ ENV }} --method ttqc --n 2
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d3 --env {{ ENV }} --method ttqc --n 3
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d5 --env {{ ENV }} --method ttqc --n 5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d1 --env {{ ENV }} --method ttqc --n 1
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d2 --env {{ ENV }} --method ttqc --n 2
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d3 --env {{ ENV }} --method ttqc --n 3
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n1m25d5 --env {{ ENV }} --method ttqc --n 5
 
 training-tqc ENV:
   @just training {{ ENV }} tqc --n 2 --m 25 --d 1
@@ -179,10 +179,10 @@ training-tqc ENV:
   @just training {{ ENV }} tqc --n 2 --m 25 --d 5
 
 simulate-tqc ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d1 --env {{ ENV }} --method tqc --n 1
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d2 --env {{ ENV }} --method tqc --n 2
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d3 --env {{ ENV }} --method tqc --n 3
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d5 --env {{ ENV }} --method tqc --n 5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d1 --env {{ ENV }} --method tqc --n 1
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d2 --env {{ ENV }} --method tqc --n 2
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d3 --env {{ ENV }} --method tqc --n 3
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/tqc/n2m25d5 --env {{ ENV }} --method tqc --n 5
 
 training-top ENV:
   @just training {{ ENV }} top --n 2 --m 25 --b -1.0
@@ -191,10 +191,10 @@ training-top ENV:
   @just training {{ ENV }} top --n 2 --m 25 --b 0.5
 
 simulate-top ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b-1.0 --env {{ ENV }} --method top --n -1.0
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b-0.5 --env {{ ENV }} --method top --n -0.5
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b0.0 --env {{ ENV }} --method top --n 0.0
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b0.5 --env {{ ENV }} --method top --n 0.5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b-1.0 --env {{ ENV }} --method top --n -1.0
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b-0.5 --env {{ ENV }} --method top --n -0.5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b0.0 --env {{ ENV }} --method top --n 0.0
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/top/n2m25b0.5 --env {{ ENV }} --method top --n 0.5
 
 training-ndtop ENV:
   @just training {{ ENV }} ndtop --n 2 --b -1.0
@@ -203,10 +203,10 @@ training-ndtop ENV:
   @just training {{ ENV }} ndtop --n 2 --b 0.5
 
 simulate-ndtop ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b-1.0 --env {{ ENV }} --method ndtop --n -1.0
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b-0.5 --env {{ ENV }} --method ndtop --n -0.5
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b0.0 --env {{ ENV }} --method ndtop --n 0.0
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b0.5 --env {{ ENV }} --method ndtop --n 0.5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b-1.0 --env {{ ENV }} --method ndtop --n -1.0
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b-0.5 --env {{ ENV }} --method ndtop --n -0.5
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b0.0 --env {{ ENV }} --method ndtop --n 0.0
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/ndtop/n2b0.5 --env {{ ENV }} --method ndtop --n 0.5
 
 training-afu ENV:
   @just training {{ ENV }} afu --n 2 --r 0.2
@@ -215,10 +215,10 @@ training-afu ENV:
   @just training {{ ENV }} afu --n 2 --r 0.8
 
 simulate-afu ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.2 --env {{ ENV }} --method afu --n 0.2
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.4 --env {{ ENV }} --method afu --n 0.4
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.6 --env {{ ENV }} --method afu --n 0.6
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.8 --env {{ ENV }} --method afu --n 0.8
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.2 --env {{ ENV }} --method afu --n 0.2
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.4 --env {{ ENV }} --method afu --n 0.4
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.6 --env {{ ENV }} --method afu --n 0.6
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n2r0.8 --env {{ ENV }} --method afu --n 0.8
 
 training-tafu ENV:
   @just training {{ ENV }} afu --n 1 --r 0.2
@@ -227,10 +227,10 @@ training-tafu ENV:
   @just training {{ ENV }} afu --n 1 --r 0.8
 
 simulate-tafu ENV:
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.2 --env {{ ENV }} --method tafu --n 0.2
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.4 --env {{ ENV }} --method tafu --n 0.4
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.6 --env {{ ENV }} --method tafu --n 0.6
-  @just compute-tqc-monte-carlo --file /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.8 --env {{ ENV }} --method tafu --n 0.8
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.2 --env {{ ENV }} --method tafu --n 0.2
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.4 --env {{ ENV }} --method tafu --n 0.4
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.6 --env {{ ENV }} --method tafu --n 0.6
+  @just compute-tqc-monte-carlo --dir /var/jenkins_home/artifacts/{{ ENV }}/afu/n1r0.8 --env {{ ENV }} --method tafu --n 0.8
 
 
 

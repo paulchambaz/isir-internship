@@ -364,8 +364,8 @@ def main() -> None:
 
     seed = 42
 
-    eval_size = 10
-    mc_total = 5
+    eval_size = 20
+    mc_total = 50
 
     files = sorted(Path(args.dir).glob("agent_history_*.pk"))
     total_steps = len(files) * 100
@@ -397,7 +397,7 @@ def main() -> None:
 
     progress.close()
 
-    with open(f"{dir}/simulations.pk", "wb") as f:
+    with open(f"{args.dir}/simulations.pk", "wb") as f:
         pickle.dump(results)
 
 
