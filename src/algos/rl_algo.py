@@ -31,6 +31,18 @@ class RLAlgo(ABC):
         """
 
     @abstractmethod
+    def evaluate(self, state: np.ndarray, action: np.ndarray) -> np.ndarray:
+        """
+        Evaluates the Q-values for a given state-action pair using the current
+        critic network(s). Use this method to assess how valuable the critic
+        considers a specific action in a given state.
+
+        Args:
+            state: Current environment state observation
+            action: Action to evaluate in the given state
+        """
+
+    @abstractmethod
     def push_buffer(
         self,
         state: np.ndarray,

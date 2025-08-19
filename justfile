@@ -31,6 +31,9 @@ compute-tqc-figure *ARGS:
 compute-tqc-figure2 *ARGS:
   @uv run python -m tools.compute_tqc_figure2 {{ ARGS }}
 
+compute-tqc-monte-carlo *ARGS:
+  @uv run python -m tools.compute_tqc_monte_carlo {{ ARGS }}
+
 visualize-tqc-figure *ARGS:
   @uv run python -m tools.visualize_tqc_figure {{ ARGS }}
 

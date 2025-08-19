@@ -84,6 +84,56 @@ class ReplayBuffer:
             self.done[idxes],
         )
 
+    def sample_timed_state_action(
+        self, batch_size: int, key: jnp.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Returns a random batch of transitions with their timesteps within episodes.
+        Goes backward from each sampled position to find the episode start.
+
+        Args:
+            batch_size: Number of transitions to sample
+            key: JAX random key for sampling
+
+        Returns:
+            Tuple of (states, actions, rewards, next_states, dones, timesteps)
+        """
+        idxes = jax.random.randint(
+            key, shape=(batch_size,), minval=0, maxval=self.n
+        )
+
+        timesteps = np.zeros(batch_size, dtype=np.int32)
+
+        for i, idx in enumerate(idxes):
+            current_idx = idx
+            t = 0
+
+            while True:
+                prev_idx = (current_idx - 1) % self.buffer_size
+
+                if prev_idx == self.p and self.n == self.buffer_size:
+                    break
+
+                if self.n < self.buffer_size and prev_idx >= self.n:
+                    break
+
+                if self.done[prev_idx, 0] == 1.0:
+                    break
+
+                current_idx = prev_idx
+                t += 1
+
+                if t >= self.buffer_size:
+                    break
+
+            timesteps[i] = t
+
+        return (
+            self.state[idxes],
+            self.action[idxes],
+            timesteps,
+        )
+
     def __len__(self) -> int:
         """Returns the current number of stored transitions."""
         return self.n
