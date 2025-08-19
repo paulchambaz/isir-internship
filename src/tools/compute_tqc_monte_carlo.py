@@ -7,8 +7,10 @@
 # (at your option) any later version.
 
 import argparse
+import gc
 import pickle
 from collections import defaultdict
+from pathlib import Path
 
 import gymnasium as gym
 import jax
@@ -62,44 +64,7 @@ def monte_carlo_estimate(
     return np.mean(np.array(returns))
 
 
-def main() -> None:
-    seed = 42
-
-    envs = {
-        "mountaincar": {
-            "name": "MountainCarContinuous-v0",
-            "kwargs": {},
-            "steps": 100_000,
-        },
-        "pendulum": {
-            "name": "Pendulum-v1",
-            "kwargs": {},
-            "steps": 200_000,
-        },
-        "lunarlander": {
-            "name": "LunarLander-v3",
-            "kwargs": {"continuous": True},
-            "steps": 200_000,
-        },
-        "swimmer": {
-            "name": "Swimmer-v5",
-            "kwargs": {},
-            "steps": 400_000,
-        },
-    }
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--file", type=str, required=True)
-    parser.add_argument("--env", type=str, required=True)
-    parser.add_argument("--gpu", action="store_true")
-
-    parser.add_argument("--method", type=str, required=True)
-    parser.add_argument("--n", type=str, required=True)
-    args = parser.parse_args()
-
-    if not args.gpu:
-        jax.config.update("jax_platform_name", "cpu")
-
+def get_args(args: argparse) -> tuple[str, int, int, int, float, float]:
     m = d = b = r = None
     match args.method:
         case "msac":
@@ -136,226 +101,303 @@ def main() -> None:
             n = 1
             r = float(args.n)
 
+    return algo, n, m, d, b, r
+
+
+def get_agent(
+    algo: str,
+    state: dict,
+    env: gym.Env,
+    n: int,
+    m: int,
+    d: int,
+    b: float,
+    r: float,
+    gamma: float,
+) -> algos.RLAlgo:
+    action_dim = env.action_space.shape[0]
+    state_dim = env.observation_space.shape[0]
+    hidden_dims = [64, 64]
+    replay_size = 400_000
+    batch_size = 256
+    lr = 3e-4
+    tau = 0.005
+    alpha = None
+    seed = 42
+    rho = r if r else 0.7
+    n_critics = n if n else 2
+    n_quantiles = m if m else 25
+    quantiles_drop = -d if d else -2
+    beta = b if b else -1.0
+
+    match algo:
+        case "sac":
+            agent = algos.SAC(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                n_critics=n_critics,
+                seed=seed,
+                state=state,
+            )
+        case "msac":
+            agent = algos.MSAC(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                n_critics=n_critics,
+                seed=seed,
+                state=state,
+            )
+        case "afu":
+            agent = algos.AFU(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                rho=rho,
+                n_critics=n_critics,
+                seed=seed,
+                state=state,
+            )
+        case "afutqc":
+            agent = algos.AFUTQC(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                rho=rho,
+                n_quantiles=n_quantiles,
+                n_critics=n_critics,
+                quantiles_drop=quantiles_drop,
+                seed=seed,
+                state=state,
+            )
+        case "afup":
+            agent = algos.AFUP(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                rho=rho,
+                seed=seed,
+                state=state,
+            )
+        case "tqc":
+            agent = algos.TQC(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                n_quantiles=n_quantiles,
+                n_critics=n_critics,
+                quantiles_drop=quantiles_drop,
+                seed=seed,
+                state=state,
+            )
+        case "top":
+            agent = algos.TOP(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                n_quantiles=n_quantiles,
+                n_critics=n_critics,
+                beta=beta,
+                seed=seed,
+                state=state,
+            )
+        case "ndtop":
+            agent = algos.NDTOP(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                n_critics=n_critics,
+                beta=beta,
+                seed=seed,
+                state=state,
+            )
+
+    return agent
+
+
+def compute_results(
+    agent: algos.RLAlgo,
+    test_env: gym.Env,
+    eval_size: int,
+    mc_total: int,
+    seed: int,
+    progress: tqdm,
+) -> dict:
+    key = random.PRNGKey(seed)
+    key, sample_key = random.split(key)
+    states, actions, timesteps = agent.buffer.sample_timed_state_action(
+        eval_size, sample_key
+    )
+
+    true_qs = []
+    estimated_qs = []
+
+    for state, action, timestep in zip(states, actions, timesteps, strict=True):
+        estimated_qs.append(agent.evaluate(state, action))
+        true_qs.append(
+            monte_carlo_estimate(
+                agent, test_env, state, action, timestep, mc_total
+            )
+        )
+        progress.update(1)
+
+    true_qs = np.array(true_qs, dtype=np.float32)
+    estimated_qs = np.array(estimated_qs, dtype=np.float32)
+
+    return {
+        "states": states,
+        "actions": actions,
+        "true_qs": true_qs,
+        "estimated_qs": estimated_qs,
+    }
+
+
+def main() -> None:
+    envs = {
+        "mountaincar": {
+            "name": "MountainCarContinuous-v0",
+            "kwargs": {},
+            "steps": 100_000,
+            "gamma": 0.99,
+        },
+        "pendulum": {
+            "name": "Pendulum-v1",
+            "kwargs": {},
+            "steps": 200_000,
+            "gamma": 0.99,
+        },
+        "lunarlander": {
+            "name": "LunarLander-v3",
+            "kwargs": {"continuous": True},
+            "steps": 200_000,
+            "gamma": 0.99,
+        },
+        "swimmer": {
+            "name": "Swimmer-v5",
+            "kwargs": {},
+            "steps": 400_000,
+            "gamma": 0.9999,
+        },
+    }
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dir", type=str, required=True)
+    parser.add_argument("--env", type=str, required=True)
+    parser.add_argument("--gpu", action="store_true")
+
+    parser.add_argument("--method", type=str, required=True)
+    parser.add_argument("--n", type=str, required=True)
+    args = parser.parse_args()
+
+    if not args.gpu:
+        jax.config.update("jax_platform_name", "cpu")
+
+    algo, n, m, d, b, r = get_args(args)
+
     env = envs[args.env]
     test_env = gym.make(env["name"], **env["kwargs"])
 
-    with open(args.file, "rb") as f:
-        data = pickle.load(f)  # noqa: S301
+    seed = 42
 
-    eval_size = 20
-    mc_total = 50
+    eval_size = 10
+    mc_total = 5
+
+    files = sorted(Path(args.dir).glob("agent_history_*.pk"))
+    total_steps = len(files) * 100
 
     results = defaultdict(dict)
+    progress = tqdm(total=total_steps * eval_size)
 
-    progress = tqdm(data.keys())
-    total_steps = max(data.keys()) * 500
+    for file in files:
+        with open(file, "rb") as f:
+            data = pickle.load(f)  # noqa: S301
 
-    for k, value in data.items():
-        step = k * 500
-        progress.set_description(
-            f"Running ({args.method} n={args.n}), step={step}/{total_steps}"
-        )
+        for k, value in data.items():
+            step = k * 500
 
-        action_dim = test_env.action_space.shape[0]
-        state_dim = test_env.observation_space.shape[0]
-        hidden_dims = [64, 64]
-        replay_size = 400_000
-        batch_size = 256
-        lr = 3e-4
-        tau = 0.005
-        gamma = 0.9999
-        alpha = None
-        seed = 42
-        rho = r if r else 0.7
-        n_critics = n if n else 2
-        n_quantiles = m if m else 25
-        quantiles_drop = -d if d else -2
-        beta = b if b else -1.0
-
-        match algo:
-            case "sac":
-                agent = algos.SAC(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    n_critics=n_critics,
-                    seed=seed,
-                    state=value,
-                )
-            case "msac":
-                agent = algos.MSAC(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    n_critics=n_critics,
-                    seed=seed,
-                    state=value,
-                )
-            case "afu":
-                agent = algos.AFU(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    rho=rho,
-                    n_critics=n_critics,
-                    seed=seed,
-                    state=value,
-                )
-            case "afutqc":
-                agent = algos.AFUTQC(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    rho=rho,
-                    n_quantiles=n_quantiles,
-                    n_critics=n_critics,
-                    quantiles_drop=quantiles_drop,
-                    seed=seed,
-                    state=value,
-                )
-            case "afup":
-                agent = algos.AFUP(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    rho=rho,
-                    seed=seed,
-                    state=value,
-                )
-            case "tqc":
-                agent = algos.TQC(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    n_quantiles=n_quantiles,
-                    n_critics=n_critics,
-                    quantiles_drop=quantiles_drop,
-                    seed=seed,
-                    state=value,
-                )
-            case "top":
-                agent = algos.TOP(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    n_quantiles=n_quantiles,
-                    n_critics=n_critics,
-                    beta=beta,
-                    seed=seed,
-                    state=value,
-                )
-            case "ndtop":
-                agent = algos.NDTOP(
-                    state_dim=state_dim,
-                    action_dim=action_dim,
-                    hidden_dims=hidden_dims,
-                    replay_size=replay_size,
-                    batch_size=batch_size,
-                    critic_lr=lr,
-                    policy_lr=lr,
-                    temperature_lr=lr,
-                    tau=tau,
-                    gamma=gamma,
-                    alpha=alpha,
-                    n_critics=n_critics,
-                    beta=beta,
-                    seed=seed,
-                    state=value,
-                )
-            case _:
-                return
-
-        key = random.PRNGKey(seed)
-        key, sample_key = random.split(key)
-        states, actions, timesteps = agent.buffer.sample_timed_state_action(
-            eval_size, sample_key
-        )
-
-        true_qs = []
-        estimated_qs = []
-
-        for state, action, timestep in zip(
-            states, actions, timesteps, strict=True
-        ):
-            estimated_qs.append(agent.evaluate(state, action))
-            true_qs.append(
-                monte_carlo_estimate(
-                    agent, test_env, state, action, timestep, mc_total
-                )
+            progress.set_description(
+                f"Running ({args.method} n={args.n}), step={step}/{total_steps * 500}"
             )
 
-        true_qs = np.array(true_qs, dtype=np.float32)
-        estimated_qs = np.array(estimated_qs, dtype=np.float32)
+            agent = get_agent(
+                algo, value, test_env, n, m, d, b, r, env["gamma"]
+            )
+            results[(args.method, args.n)][step] = compute_results(
+                agent, test_env, eval_size, mc_total, seed, progress
+            )
 
-        results[(args.method, args.n)][step] = {
-            "states": states,
-            "actions": actions,
-            "true_qs": true_qs,
-            "estimated_qs": estimated_qs,
-        }
+        del data
+        jax.clear_caches()
+        gc.collect()
 
-        errors = estimated_qs - true_qs
+    progress.close()
 
-        progress.update(1)
-        progress.set_postfix({"bias": get_stats(errors)})
-
-    with open("outputs/random_test.pk", "wb") as f:
+    with open(f"{dir}/simulations.pk", "wb") as f:
         pickle.dump(results)
 
 
