@@ -142,8 +142,8 @@ def main() -> None:
     with open(args.file, "rb") as f:
         data = pickle.load(f)  # noqa: S301
 
-    eval_size = 50
-    mc_total = 100
+    eval_size = 20
+    mc_total = 50
 
     results = defaultdict(dict)
 
