@@ -57,6 +57,40 @@ COLORS = {
     ("tqc", "3"): "#88c162",
     ("tqc", "5"): "#98d171",
 }
+CONVERT = {
+    ("afu n1r0.2"): ("tafu", "0.2"),
+    ("afu n1r0.4"): ("tafu", "0.4"),
+    ("afu n1r0.6"): ("tafu", "0.6"),
+    ("afu n1r0.8"): ("tafu", "0.8"),
+    ("afu n2r0.2"): ("afu", "0.2"),
+    ("afu n2r0.4"): ("afu", "0.4"),
+    ("afu n2r0.6"): ("afu", "0.6"),
+    ("afu n2r0.8"): ("afu", "0.8"),
+    ("msac n1"): ("msac", "1"),
+    ("msac n10"): ("msac", "10"),
+    ("msac n3"): ("msac", "3"),
+    ("msac n5"): ("msac", "5"),
+    ("ndtop n2b-0.5"): ("ndtop", "-0.5"),
+    ("ndtop n2b-1.0"): ("ndtop", "-1.0"),
+    ("ndtop n2b0.0"): ("ndtop", "0.0"),
+    ("ndtop n2b0.5"): ("ndtop", "0.5"),
+    ("sac n2"): ("sac", "2"),
+    ("sac n3"): ("sac", "3"),
+    ("sac n5"): ("sac", "5"),
+    ("sac n8"): ("sac", "8"),
+    ("top n2m25b-0.5"): ("top", "-0.5"),
+    ("top n2m25b-1.0"): ("top", "-1.0"),
+    ("top n2m25b0.0"): ("top", "0.0"),
+    ("top n2m25b0.5"): ("top", "0.5"),
+    ("tqc n1m25d1"): ("ttqc", "1"),
+    ("tqc n1m25d2"): ("ttqc", "2"),
+    ("tqc n1m25d3"): ("ttqc", "3"),
+    ("tqc n1m25d5"): ("ttqc", "5"),
+    ("tqc n2m25d1"): ("tqc", "1"),
+    ("tqc n2m25d2"): ("tqc", "2"),
+    ("tqc n2m25d3"): ("tqc", "3"),
+    ("tqc n2m25d5"): ("tqc", "5"),
+}
 
 
 def display_graph(results: dict, visu_method: str) -> None:
@@ -72,27 +106,12 @@ def display_graph(results: dict, visu_method: str) -> None:
         ):
             continue
 
-        steps = value.keys()
+        steps = [k * 500 for k in value]
+        stats = [compute_stats(r) for r in value.values()]
+        _, q1s, iqms, q3s, _ = zip(*stats, strict=True)
 
-        iqms = []
-        q1s = []
-        q3s = []
-        for _, data in value.items():
-            true_qs = data["true_qs"]
-            estimated_qs = data["estimated_qs"]
+        ax.plot(steps, iqms, linewidth=2)
 
-            if method in {"afu", "tafu"}:
-                estimated_qs = estimated_qs[:, 0]
-
-            errors = estimated_qs - true_qs
-
-            _, q1, iqm, q3, _ = compute_stats(errors)
-
-            q1s.append(q1)
-            iqms.append(iqm)
-            q3s.append(q3)
-
-        ax.axhline(y=0, color="black", linewidth=2, zorder=1)
         ax.fill_between(
             steps,
             q3s,
@@ -115,7 +134,7 @@ def display_graph(results: dict, visu_method: str) -> None:
     )
 
     ax.set_xlabel("Training step")
-    ax.set_ylabel("Bias")
+    ax.set_ylabel("Returns")
 
     ax.grid(visible=True, alpha=0.25)
     ax.legend()
@@ -124,18 +143,32 @@ def display_graph(results: dict, visu_method: str) -> None:
     directory = "paper/figures"
     Path(directory).mkdir(parents=True, exist_ok=True)
     plt.savefig(
-        f"{directory}/env_bias_{visu_method}.png", bbox_inches="tight", dpi=200
+        f"{directory}/env_returns_{visu_method}.png",
+        bbox_inches="tight",
+        dpi=200,
     )
-    plt.close()
+
+    # plt.show()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--file", type=str, required=True)
+    parser = argparse.ArgumentParser(
+        description="Visualize MountainCar value functions and policies"
+    )
+    parser.add_argument(
+        "--dir", type=str, required=True, help="Path to agent state directory"
+    )
     args = parser.parse_args()
 
-    with open(args.file, "rb") as f:
-        results = pickle.load(f)  # noqa:S301
+    checkpoint_files = sorted(Path(args.dir).glob("*/*/history.pk"))
+
+    results = {}
+
+    for file in checkpoint_files:
+        with open(file, "rb") as f:
+            data = pickle.load(f)  # noqa: S301
+
+        results[CONVERT[f"{file.parent.parent.name} {file.parent.name}"]] = data
 
     plt.rcParams["font.size"] = 20
     plt.rcParams["text.usetex"] = True

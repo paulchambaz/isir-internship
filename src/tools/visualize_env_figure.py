@@ -8,6 +8,7 @@
 
 import argparse
 import pickle
+from itertools import chain
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -59,74 +60,56 @@ COLORS = {
 }
 
 
-def display_graph(results: dict, visu_method: str) -> None:
-    fig, ax = plt.subplots(figsize=(12, 8))
+def display_graph(results: dict, step: int) -> None:
+    fig, ax = plt.subplots(figsize=(12, 9))
 
     for (method, n), value in sorted(
         results.items(), key=lambda x: (x[0][0], float(x[0][1]))
     ):
-        if not (
-            (method == "msac" and n == "1")
-            or (method == "sac" and n == "2")
-            or method == visu_method
-        ):
-            continue
+        data = value[step]
+        true_qs = data["true_qs"]
+        estimated_qs = data["estimated_qs"]
 
-        steps = value.keys()
+        if method in {"afu", "tafu"}:
+            estimated_qs = estimated_qs[:, 0]
 
-        iqms = []
-        q1s = []
-        q3s = []
-        for _, data in value.items():
-            true_qs = data["true_qs"]
-            estimated_qs = data["estimated_qs"]
+        errors = estimated_qs - true_qs
 
-            if method in {"afu", "tafu"}:
-                estimated_qs = estimated_qs[:, 0]
+        bias = errors.mean()
+        variance = errors.var()
 
-            errors = estimated_qs - true_qs
+        ax.scatter([bias], [variance], c=COLORS[(method, n)], s=300)
+        ax.text(bias, variance, n, ha="center", va="center", fontsize=16)
 
-            _, q1, iqm, q3, _ = compute_stats(errors)
+    ax.set_yscale("log")
 
-            q1s.append(q1)
-            iqms.append(iqm)
-            q3s.append(q3)
+    # legend = ax.legend(
+    #     loc="upper left",
+    #     frameon=True,
+    #     fancybox=True,
+    #     shadow=True,
+    #     fontsize=16,
+    # )
+    #
+    # legend.get_frame().set_facecolor("white")
+    # legend.get_frame().set_alpha(0.7)
 
-        ax.axhline(y=0, color="black", linewidth=2, zorder=1)
-        ax.fill_between(
-            steps,
-            q3s,
-            q1s,
-            color=COLORS[(method, n)],
-            alpha=0.2,
-            zorder=2,
-        )
-        ax.plot(
-            steps,
-            iqms,
-            color=COLORS[(method, n)],
-            label=f"{method} n={n}",
-            linewidth=3,
-            zorder=4,
-        )
+    ax.grid(visible=True, which="major", alpha=0.6, linewidth=0.8)
 
-    plt.gca().xaxis.set_major_formatter(
-        FuncFormatter(lambda x, pos: f"{int(x / 1000)}k")
+    ax.set_xlabel(
+        r"$\mathbb{E}[\Delta(Q_{\theta} - Q^{\pi})]$",
+        fontsize=30,
+    )
+    ax.set_ylabel(
+        r"$\mathbb{V}\text{ar}[\Delta(Q_{\theta} - Q^{\pi})]$",
+        fontsize=30,
     )
 
-    ax.set_xlabel("Training step")
-    ax.set_ylabel("Bias")
-
-    ax.grid(visible=True, alpha=0.25)
-    ax.legend()
+    ax.set_title(f"Training step: {step}", fontsize=24, pad=20)
 
     plt.tight_layout()
-    directory = "paper/figures"
-    Path(directory).mkdir(parents=True, exist_ok=True)
-    plt.savefig(
-        f"{directory}/env_bias_{visu_method}.png", bbox_inches="tight", dpi=200
-    )
-    plt.close()
+
+    plt.show()
 
 
 def main() -> None:
@@ -144,14 +127,13 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    display_graph(results, "msac")
-    display_graph(results, "sac")
-    display_graph(results, "tqc")
-    display_graph(results, "ttqc")
-    display_graph(results, "top")
-    display_graph(results, "ndtop")
-    display_graph(results, "afu")
-    display_graph(results, "tafu")
+    all_steps = sorted(
+        set(chain.from_iterable(values.keys() for values in results.values()))
+    )
+
+    display_graph(results, 80_000)
+    # for step in all_steps:
+    #     display_graph(results, step)
 
 
 if __name__ == "__main__":

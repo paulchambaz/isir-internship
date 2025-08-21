@@ -69,18 +69,13 @@ def main() -> None:
     plt.gca().xaxis.set_major_formatter(
         FuncFormatter(lambda x, pos: f"{int(x / 1000)}k")
     )
+    ax.axhline(y=0, color="black", linewidth=2, zorder=1)
     ax.set_ylabel("Episode Return")
     ax.legend()
     ax.grid(visible=True, alpha=0.25)
 
     Path("paper/figures").mkdir(exist_ok=True)
     plt.show()
-    # plt.savefig(
-    #     "paper/figures/training_curve.svg",
-    #     bbox_inches="tight",
-    #     pad_inches=0,
-    #     dpi=300,
-    # )
 
 
 if __name__ == "__main__":

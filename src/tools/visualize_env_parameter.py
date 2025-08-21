@@ -44,7 +44,9 @@ def display_graph(results: dict, visu_method: str) -> None:
     params = []
     stats_list = []
 
-    for (method, n), value in sorted(results.items(), key=lambda x: (x[0][0], float(x[0][1]))):
+    for (method, n), value in sorted(
+        results.items(), key=lambda x: (x[0][0], float(x[0][1]))
+    ):
         if method != visu_method:
             continue
 
@@ -67,7 +69,6 @@ def display_graph(results: dict, visu_method: str) -> None:
     symbol = SYMBOLS[visu_method]
     method = visu_method
 
-
     positions = np.arange(len(params))
     iqm_values = []
 
@@ -80,7 +81,6 @@ def display_graph(results: dict, visu_method: str) -> None:
 
         box_width = 0.15
         whisker_width = 0.08
-
 
         plt.gca().add_patch(
             plt.Rectangle(
@@ -98,14 +98,14 @@ def display_graph(results: dict, visu_method: str) -> None:
             [q1, q1],
             color=color,
             linewidth=4,
-                zorder=2,
+            zorder=2,
         )
         plt.plot(
             [i - box_width / 2, i + box_width / 2],
             [q3, q3],
             color=color,
             linewidth=4,
-                zorder=2,
+            zorder=2,
         )
 
         plt.plot(
@@ -113,14 +113,14 @@ def display_graph(results: dict, visu_method: str) -> None:
             [min_val, q1],
             color=color,
             linewidth=3,
-                zorder=2,
+            zorder=2,
         )
         plt.plot(
             [i, i],
             [q3, max_val],
             color=color,
             linewidth=3,
-                zorder=2,
+            zorder=2,
         )
 
         plt.plot(
@@ -128,14 +128,14 @@ def display_graph(results: dict, visu_method: str) -> None:
             [min_val, min_val],
             color=color,
             linewidth=3,
-                zorder=2,
+            zorder=2,
         )
         plt.plot(
             [i - whisker_width / 2, i + whisker_width / 2],
             [max_val, max_val],
             color=color,
             linewidth=3,
-                zorder=2,
+            zorder=2,
         )
 
         plt.plot(
@@ -145,14 +145,14 @@ def display_graph(results: dict, visu_method: str) -> None:
             markersize=8,
             markeredgecolor=color,
             markerfacecolor=color,
-                zorder=2,
+            zorder=2,
         )
         plt.plot(
             [i - box_width / 2, i + box_width / 2],
             [iqm, iqm],
             color=color,
             linewidth=2,
-                zorder=2,
+            zorder=2,
         )
 
     plt.plot(
@@ -179,6 +179,7 @@ def display_graph(results: dict, visu_method: str) -> None:
         f"{directory}/env_param_{visu_method}.png", bbox_inches="tight", dpi=200
     )
     plt.close()
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
