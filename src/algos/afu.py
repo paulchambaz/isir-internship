@@ -212,7 +212,7 @@ class AFU(RLAlgo):
     def _compute_critic(
         self, q_params: dict, states: np.ndarray, actions: np.ndarray
     ) -> np.ndarray:
-        return self.q_network.apply(q_params, states, actions)
+        return self.q_network.apply(q_params, states, actions)[:, 0]
 
     def push_buffer(
         self,

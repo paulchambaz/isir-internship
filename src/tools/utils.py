@@ -28,3 +28,4 @@ def align_center(ax1: plt.Axes, ax2: plt.Axes) -> None:
     y2_min, y2_max = ax2.get_ylim()
     y2 = max(abs(y2_min), abs(y2_max))
     ax2.set_ylim(-y2, y2)
+

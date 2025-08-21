@@ -46,6 +46,12 @@ visualize-bias *ARGS:
 visualize-bias-parameter *ARGS:
   @uv run python -m tools.visualize_bias_parameter {{ ARGS }}
 
+visualize-env-bias *ARGS:
+  @uv run python -m tools.visualize_env_bias {{ ARGS }}
+
+visualize-env-parameter *ARGS:
+  @uv run python -m tools.visualize_env_parameter {{ ARGS }}
+
 organize ENV ALGO:
   @mv ~/down/history.pk ./outputs/figure/{{ ENV }}/{{ ALGO }}_history.pk
   @uv run python -m tools.merge --input ~/down/agent_history_0.pk ~/down/agent_history_1.pk --output ./outputs/figure/{{ ENV }}/{{ ALGO }}_agent.pt
