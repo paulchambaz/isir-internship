@@ -23,11 +23,11 @@ def main() -> None:
     with open("outputs/tqc_figure_results.pkl", "rb") as f:
         results = pickle.load(f)  # noqa: S301
 
-    final_step = 3000
+    step = 3000
     processed_results = {}
 
     for (method, n), step_data in results.items():
-        data = step_data[final_step]
+        data = step_data[step]
 
         errors = []
         policy_errors = []

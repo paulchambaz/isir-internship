@@ -363,23 +363,23 @@ def compute_bias_variance(
 def main() -> None:
     num_seed = 3
     tau = 1
-    total_steps = 3_000
+    total_steps = 5_000
     buffer_size = 50
     eval_freq = 50
 
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
-    avg_data = [2]
-    min_data = [2]
-    tqc_data = [2]
+    # avg_data = [2]
+    # min_data = [2]
+    # tqc_data = [2]
 
     # avg_data = [1, 3, 5]
     # min_data = [2, 3, 4]
     # tqc_data = [0, 1, 2, 5, 8]
 
-    # avg_data = [1, 3, 5, 10, 20, 50]
-    # min_data = [2, 3, 4, 6, 8, 10]
-    # tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    avg_data = [1, 3, 5, 10, 20, 50]
+    min_data = [2, 3, 4, 6, 8, 10]
+    tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
 
     experiments = list(
         itertools.chain(
