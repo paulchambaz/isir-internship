@@ -13,10 +13,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from matplotlib.ticker import FuncFormatter
 from tqdm import tqdm
-
-from .utils import compute_stats
 
 COLORS = {
     "tafu": "#be6db7",
@@ -74,7 +71,6 @@ def display_graph(results: dict, step: int) -> None:
             alpha=0.7,
             label=r"SAC ($N$ Q-networks)",
         ),
-
         Line2D(
             [0],
             [0],
@@ -95,7 +91,6 @@ def display_graph(results: dict, step: int) -> None:
             alpha=0.7,
             label=r"TQC $N=1$ $M=25$ ($d$ dropped quantiles)",
         ),
-
         Line2D(
             [0],
             [0],
@@ -116,7 +111,6 @@ def display_graph(results: dict, step: int) -> None:
             alpha=0.7,
             label=r"ND-TOP $N=2$ ($\beta$ coefficient)",
         ),
-
         Line2D(
             [0],
             [0],
@@ -174,9 +168,7 @@ def display_graph(results: dict, step: int) -> None:
 
     directory = "paper/figures/env_figure"
     Path(directory).mkdir(parents=True, exist_ok=True)
-    plt.savefig(
-        f"{directory}/{step:06d}.png", bbox_inches="tight", dpi=100
-    )
+    plt.savefig(f"{directory}/{step:06d}.png", bbox_inches="tight", dpi=100)
     plt.close()
 
 

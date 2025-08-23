@@ -36,10 +36,10 @@ class ToyMdp:
             np.sin(self.nu * actions)
         )
 
-    def sample_reward(self, action: float, rng: np.random.Generator) -> float:
+    def reward(self, action: float, rng: np.random.Generator) -> float:
         return self.f(action) + rng.normal(0, self.sigma)
 
-    def true_q_value(self, action: float) -> float:
+    def q_optimal(self, action: float) -> float:
         return self.f(action) + self.gamma * self.optimal_reward / (
             1 - self.gamma
         )
@@ -279,7 +279,7 @@ class TqcAgent:
     def __call__(self, actions: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             quantiles = self.network(actions)
-            q_values = quantiles.mean(axis=(1,2))
+            q_values = quantiles.mean(axis=(1, 2))
             return q_values.reshape(-1, 1)
 
 
@@ -288,7 +288,7 @@ def create_dataset(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     rng = np.random.default_rng(seed)
     actions = np.linspace(-1, 1, buffer_size)
-    rewards = [mdp.sample_reward(a, rng) for a in actions]
+    rewards = [mdp.reward(a, rng) for a in actions]
 
     actions_tensor = torch.tensor(actions, dtype=torch.float32).reshape(-1, 1)
     rewards_tensor = torch.tensor(rewards, dtype=torch.float32).reshape(-1, 1)
@@ -308,17 +308,26 @@ def compute_bias_variance(
     tau: float,
     buffer_size: int,
     total_steps: int,
+    eval_freq: int,
     num_seed: int,
     create_agent: any,
     progress_bar: tqdm,
     method: str,
 ) -> None:
     eval_actions = np.linspace(-1, 1, 2000).reshape(-1, 1)
-    # true_q = np.array([mdp.true_q_value(a.item()) for a in eval_actions])
+    eval_actions_flat = eval_actions.flatten()
+    true_qs = np.array([mdp.q_optimal(a) for a in eval_actions_flat])
 
-    biases = []
-    variances = []
-    optim_actions = []
+    step_results = {}
+    for step in range(0, total_steps + 1, eval_freq):
+        step_results[step] = {
+            "actions": [],
+            "optimal_action": [],
+            "true_qs": [],
+            "predicted_qs": [],
+            "policy_action": [],
+            "policy_qs": [],
+        }
 
     for seed in range(num_seed):
         torch.manual_seed(seed)
@@ -327,35 +336,28 @@ def compute_bias_variance(
         agent = create_agent(n, mdp.gamma, tau)
         agent.set_buffer(dataset)
 
-        for step in range(total_steps):
-            agent.update()
+        for step in range(0, total_steps + 1, eval_freq):
+            predicted_qs = agent(torch.Tensor(eval_actions)).numpy().flatten()
+            policy_action = eval_actions_flat[np.argmax(predicted_qs)]
+            policy_qs = mdp.q_policy(eval_actions_flat, policy_action)
+
+            step_results[step]["actions"].append(eval_actions_flat.copy())
+            step_results[step]["optimal_action"].append(mdp.optimal_action)
+            step_results[step]["true_qs"].append(true_qs.copy())
+            step_results[step]["predicted_qs"].append(predicted_qs)
+            step_results[step]["policy_action"].append(policy_action)
+            step_results[step]["policy_qs"].append(policy_qs)
 
             progress_bar.set_description(
-                f"Running ({method} n={n}), seed={seed + 1:02d}/{num_seed:02d}, step={step + 1:04d}/{total_steps}"
+                f"Running ({method} n={n}), seed={seed + 1:02d}/{num_seed:02d}, step={step:04d}/{total_steps}"
             )
-            progress_bar.update(1)
 
-        predicted_q = agent(torch.Tensor(eval_actions)).numpy()
-        optim_action = eval_actions[np.argmax(predicted_q)]
-        policy_q = mdp.q_policy(eval_actions, optim_action)
+            if step < total_steps:
+                for _ in range(eval_freq):
+                    agent.update()
+                    progress_bar.update(1)
 
-        error = predicted_q - policy_q
-
-        # TODO: do not already compute anything
-        # instead keep the all the relevant information in order to graph it
-
-        biases.append(error.mean())
-        variances.append(error.var())
-        optim_actions.append(optim_action)
-
-    biases = np.array(biases)
-    variances = np.array(variances)
-
-    bias = np.mean(biases)
-    variance = np.mean(variances)
-    policy_error = np.mean(np.abs(optim_actions - mdp.optimal_action))
-
-    return bias, variance, policy_error
+    return step_results
 
 
 def main() -> None:
@@ -363,20 +365,21 @@ def main() -> None:
     tau = 1
     total_steps = 3_000
     buffer_size = 50
+    eval_freq = 50
 
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
 
-    # avg_data = [2]
-    # min_data = [2]
-    # tqc_data = [2]
+    avg_data = [2]
+    min_data = [2]
+    tqc_data = [2]
 
     # avg_data = [1, 3, 5]
     # min_data = [2, 3, 4]
     # tqc_data = [0, 1, 2, 5, 8]
 
-    avg_data = [1, 3, 5, 10, 20, 50]
-    min_data = [2, 3, 4, 6, 8, 10]
-    tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
+    # avg_data = [1, 3, 5, 10, 20, 50]
+    # min_data = [2, 3, 4, 6, 8, 10]
+    # tqc_data = [0, 1, 2, 3, 4, 5, 6, 7, 10, 13, 16]
 
     experiments = list(
         itertools.chain(
@@ -397,6 +400,7 @@ def main() -> None:
             tau=tau,
             buffer_size=buffer_size,
             total_steps=total_steps,
+            eval_freq=eval_freq,
             num_seed=num_seed,
             create_agent=create_agent,
             progress_bar=progress_bar,

@@ -9,12 +9,54 @@
 import pickle
 
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.lines import Line2D
+
+COLORS = {
+    "avg": "#5591e1",
+    "min": "#d76868",
+    "tqc": "#6aa142",
+}
 
 
 def main() -> None:
     with open("outputs/tqc_figure_results.pkl", "rb") as f:
         results = pickle.load(f)  # noqa: S301
+
+    final_step = 3000
+    processed_results = {}
+
+    for (method, n), step_data in results.items():
+        data = step_data[final_step]
+
+        errors = []
+        policy_errors = []
+
+        for seed in range(len(data["predicted_qs"])):
+            predicted_qs = data["predicted_qs"][seed]
+            policy_qs = data["policy_qs"][seed]
+            policy_action = data["policy_action"][seed]
+            optimal_action = data["optimal_action"][seed]
+
+            error = predicted_qs - policy_qs
+            errors.append(error.mean())
+            policy_errors.append(abs(policy_action - optimal_action))
+
+        errors = np.array(errors)
+        policy_errors = np.array(policy_errors)
+
+        bias = np.mean(errors)
+        variance = np.mean(
+            [
+                np.var(data["predicted_qs"][seed] - data["policy_qs"][seed])
+                for seed in range(len(data["predicted_qs"]))
+            ]
+        )
+        policy_error = np.mean(policy_errors)
+
+        processed_results[(method, n)] = (bias, variance, policy_error)
+
+    results = processed_results
 
     plt.rcParams["font.size"] = 20
     plt.rcParams["text.usetex"] = True
@@ -174,19 +216,15 @@ def main() -> None:
     plt.draw()
 
     plt.tight_layout()
-    # plt.show()
-    plt.savefig(
-        "paper/figures/tqc_figure.svg",
-        bbox_inches="tight",
-        dpi=300,
-    )
-    plt.savefig(
-        "paper/figures/tqc_figure.png",
-        bbox_inches="tight",
-        dpi=300,
-    )
+
+    plt.show()
+
+    # plt.savefig(
+    #     "paper/figures/tqc_figure.png",
+    #     bbox_inches="tight",
+    #     dpi=300,
+    # )
 
 
 if __name__ == "__main__":
     main()
-
