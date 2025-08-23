@@ -34,7 +34,7 @@ class ToyMdp:
         self.a1 = a1
         self.nu = nu
 
-        actions = np.linspace(-1, 1, 1000000)
+        actions = np.linspace(-1, 1, 10000)
         rewards = self._mean_reward(self.a0, self.a1, self.nu, actions)
         self.optimal_action = actions[np.argmax(rewards)]
         self.optimal_reward = np.max(rewards)
@@ -75,6 +75,29 @@ class MLP(nn.Module):
             self.output_dim,
             kernel_init=jax.nn.initializers.he_uniform(),
         )(x)
+
+
+# class MLP(nn.Module):
+#     hidden_dims: list[int]
+#     output_dim: int
+#
+#     @nn.compact
+#     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+#         for hidden_dim in self.hidden_dims:
+#             x = jax.nn.relu(
+#                 nn.Dense(
+#                     hidden_dim,
+#                     kernel_init=jax.nn.initializers.variance_scaling(
+#                         scale=1 / 3, mode="fan_in", distribution="uniform"
+#                     ),
+#                 )(x)
+#             )
+#         return nn.Dense(
+#             self.output_dim,
+#             kernel_init=jax.nn.initializers.variance_scaling(
+#                 scale=1 / 3, mode="fan_in", distribution="uniform"
+#             ),
+#         )(x)
 
 
 class QNetwork(nn.Module):
@@ -413,6 +436,7 @@ class TqcEnsemble:
     ) -> jnp.ndarray:
         quantiles = self.network.apply(params, states, actions)
 
+        # TODO: that is a mistake, there is no cut on the call
         union_quantiles = quantiles.reshape(actions.shape[0], -1)
         sorted_quantiles = jnp.sort(union_quantiles, axis=-1)
         truncated_quantiles = sorted_quantiles[:, : self.total_kept]
@@ -927,12 +951,12 @@ def main() -> None:
 
     buffer_size = 50
 
-    avg_data = [1]
+    avg_data = [2]
     # avg_data = [1, 3, 5, 10, 20, 50]
     # min_data = [2, 3, 4, 6, 8, 10]
     # tqc_data = [1, 2, 3, 4, 6, 10, 14]
     # top_data = [-1.0, -0.7, -0.5, 0.0, 0.5, 1.0]
-    rho_data = [0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95]
+    # rho_data = [0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95]
 
     experiments = list(
         itertools.chain(
@@ -942,7 +966,7 @@ def main() -> None:
             # [("ttqc", n, create_ttqc_ensemble) for n in tqc_data],
             # [("ndtop", beta, create_ndtop_ensemble) for beta in top_data],
             # [("top", beta, create_top_ensemble) for beta in top_data],
-            [("afu", rho, create_afu_ensemble) for rho in rho_data],
+            # [("afu", rho, create_afu_ensemble) for rho in rho_data],
         )
     )
 
