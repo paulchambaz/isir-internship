@@ -37,8 +37,23 @@ compute-tqc-monte-carlo *ARGS:
 visualize-tqc-figure *ARGS:
   @uv run python -m tools.visualize_tqc_figure {{ ARGS }}
 
-visualize-tqc-figure2 *ARGS:
-  @uv run python -m tools.visualize_tqc_figure2 {{ ARGS }}
+visualize-bias-evolution-over-time *ARGS:
+  @uv run python -m tools.visualize_bias_evolution_over_time {{ ARGS }}
+
+visualize-bias-variance-scatter-plot *ARGS:
+  @uv run python -m tools.visualize_bias_variance_scatter_plot {{ ARGS }}
+
+visualize-returns-over-time *ARGS:
+  @uv run python -m tools.visualize_returns_over_time {{ ARGS }}
+
+visualize-q-function-evolution-over-action *ARGS:
+  @uv run python -m tools.visualize_q_function_evolution_over_action {{ ARGS }}
+
+visualize-bias-over-parameter *ARGS:
+  @uv run python -m tools.visualize_bias_over_parameter {{ ARGS }}
+
+visualize-returns-over-parameter *ARGS:
+  @uv run python -m tools.visualize_returns_over_parameter {{ ARGS }}
 
 visualize-figure-critics *ARGS:
   @uv run python -m tools.visualize_figure_critics {{ ARGS }}

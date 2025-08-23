@@ -6,7 +6,9 @@
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 
+import argparse
 import pickle
+from itertools import chain
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,17 +21,14 @@ COLORS = {
 }
 
 
-def main() -> None:
-    with open("outputs/tqc_figure_results.pkl", "rb") as f:
-        results = pickle.load(f)  # noqa: S301
-
-    step = 3000
+def visualize(results: dict, step: int) -> None:
     processed_results = {}
 
     for (method, n), step_data in results.items():
         data = step_data[step]
 
-        errors = []
+        biases = []
+        variances = []
         policy_errors = []
 
         for seed in range(len(data["predicted_qs"])):
@@ -39,20 +38,13 @@ def main() -> None:
             optimal_action = data["optimal_action"][seed]
 
             error = predicted_qs - policy_qs
-            errors.append(error.mean())
+            biases.append(error.mean())
+            variances.append(error.var())
             policy_errors.append(abs(policy_action - optimal_action))
 
-        errors = np.array(errors)
-        policy_errors = np.array(policy_errors)
-
-        bias = np.mean(errors)
-        variance = np.mean(
-            [
-                np.var(data["predicted_qs"][seed] - data["policy_qs"][seed])
-                for seed in range(len(data["predicted_qs"]))
-            ]
-        )
-        policy_error = np.mean(policy_errors)
+        bias = np.mean(biases)
+        variance = np.mean(variances)
+        policy_error = np.mean(np.array(policy_errors))
 
         processed_results[(method, n)] = (bias, variance, policy_error)
 
@@ -70,8 +62,12 @@ def main() -> None:
     ax.set_xscale("symlog", linthresh=1)
     ax.set_yscale("log")
 
-    ax.set_xlim(-1e2, 3e4)
-    ax.set_ylim(4e-3, 2.5e2)
+    ax.set_xlim(-3e2, 3e4)
+    ax.set_ylim(4e-3, 2.5e4)
+
+    ax.axvline(x=0, color="black", linewidth=2, zorder=1)
+
+    ax.set_title(f"Training step: {step}", fontsize=24, pad=20)
 
     ax.grid(visible=True, which="major", alpha=0.6, linewidth=0.8)
 
@@ -89,21 +85,21 @@ def main() -> None:
         "y": [],
         "sizes": [],
         "numbers": [],
-        "color": "#6ca247",
+        "color": COLORS["tqc"],
     }
     min_points = {
         "x": [],
         "y": [],
         "sizes": [],
         "numbers": [],
-        "color": "#d66b6a",
+        "color": COLORS["min"],
     }
     avg_points = {
         "x": [],
         "y": [],
         "sizes": [],
         "numbers": [],
-        "color": "#5591e1",
+        "color": COLORS["avg"],
     }
 
     for (method, n), (bias, variance, policy_error) in results.items():
@@ -155,7 +151,7 @@ def main() -> None:
             [0],
             marker="o",
             color="w",
-            markerfacecolor="#6ca247",
+            markerfacecolor=COLORS["tqc"],
             markersize=18,
             alpha=0.7,
             label="TQC N=2 M=25 (d dropped quantiles)",
@@ -165,7 +161,7 @@ def main() -> None:
             [0],
             marker="o",
             color="w",
-            markerfacecolor="#d66b6a",
+            markerfacecolor=COLORS["min"],
             markersize=18,
             alpha=0.7,
             label="MIN (N Q-networks)",
@@ -175,7 +171,7 @@ def main() -> None:
             [0],
             marker="o",
             color="w",
-            markerfacecolor="#5591e1",
+            markerfacecolor=COLORS["avg"],
             markersize=18,
             alpha=0.7,
             label="AVG (N Q-networks)",
@@ -224,6 +220,29 @@ def main() -> None:
     #     bbox_inches="tight",
     #     dpi=300,
     # )
+    # plt.savefig(
+    #     "paper/figures/tqc_figure.svg",
+    #     bbox_inches="tight",
+    #     dpi=300,
+    # )
+
+    plt.close()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--file", type=str, required=True)
+    args = parser.parse_args()
+
+    with open(args.file, "rb") as f:
+        results = pickle.load(f)  # noqa:S301
+
+    all_steps = sorted(
+        set(chain.from_iterable(values.keys() for values in results.values()))
+    )
+
+    for step in all_steps:
+        visualize(results, step)
 
 
 if __name__ == "__main__":
