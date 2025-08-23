@@ -362,7 +362,7 @@ def compute_bias_variance(
 
 def main() -> None:
     num_seed = 50
-    tau = 1
+    tau = 0.05
     total_steps = 5_000
     buffer_size = 50
     eval_freq = 50
