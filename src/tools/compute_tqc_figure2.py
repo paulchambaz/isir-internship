@@ -361,7 +361,7 @@ def compute_bias_variance(
 
 
 def main() -> None:
-    num_seed = 3
+    num_seed = 50
     tau = 1
     total_steps = 5_000
     buffer_size = 50
