@@ -39,13 +39,11 @@ class ToyMdp:
     def reward(self, action: float, rng: np.random.Generator) -> float:
         return self.f(action) + rng.normal(0, self.sigma)
 
-    def q_optimal(self, action: float) -> float:
-        return self.f(action) + self.gamma * self.optimal_reward / (
-            1 - self.gamma
-        )
-
     def q_policy(self, action: np.ndarray, policy: np.ndarray) -> np.ndarray:
         return self.f(action) + self.gamma * self.f(policy) / (1 - self.gamma)
+
+    def q_optimal(self, action: float) -> float:
+        return self.q_policy(action, self.optimal_action)
 
 
 class QNetwork(nn.Module):
@@ -368,14 +366,6 @@ def main() -> None:
     eval_freq = 50
 
     mdp = ToyMdp(gamma=0.99, sigma=0.25, a0=0.3, a1=0.9, nu=5.0)
-
-    # avg_data = [2]
-    # min_data = [2]
-    # tqc_data = [2]
-
-    # avg_data = [1, 3, 5]
-    # min_data = [2, 3, 4]
-    # tqc_data = [0, 1, 2, 5, 8]
 
     avg_data = [1, 3, 5, 10, 20, 50]
     min_data = [2, 3, 4, 6, 8, 10]
