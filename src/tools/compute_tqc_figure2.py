@@ -37,7 +37,7 @@ class ToyMdp:
         )
 
     def reward(self, action: float, rng: np.random.Generator) -> float:
-        return self.f(action) + rng.normal(0, self.sigma)
+        return self.f(action) + rng.normal(0, self.sigma, action.shape)
 
     def q_policy(self, action: np.ndarray, policy: np.ndarray) -> np.ndarray:
         return self.f(action) + self.gamma * self.f(policy) / (1 - self.gamma)

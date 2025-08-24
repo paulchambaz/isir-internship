@@ -18,6 +18,9 @@ def main() -> None:
     rewards = mdp.f(actions)
     q_values = mdp.q_optimal(actions)
 
+    sample_actions = np.linspace(-1, 1, 50).reshape(-1, 1)
+    samples = mdp.reward(sample_actions, np.random.default_rng(42))
+
     plt.rcParams["font.size"] = 20
     plt.rcParams["text.usetex"] = True
     plt.rcParams["font.family"] = "serif"
@@ -42,6 +45,15 @@ def main() -> None:
         s=100,
         zorder=5,
         label=r"Optimal action",
+    )
+
+    ax.scatter(
+        sample_actions,
+        samples,
+        color="gray",
+        s=30,
+        zorder=5,
+        label=r"$R(s_0, a)$",
     )
 
     ax.set_xlabel("Action")
@@ -80,7 +92,7 @@ def main() -> None:
     )
 
     ax.set_xlabel("Action")
-    ax.set_ylabel("Expectation of rewards")
+    ax.set_ylabel("Optimal returns over infinite time horizon")
 
     ax.grid(visible=True, alpha=0.25)
     ax.legend()
