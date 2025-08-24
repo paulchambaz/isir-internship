@@ -61,10 +61,11 @@ def visualize(results: dict, step: int) -> None:
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    ax.set_xscale("symlog", linthresh=1)
+    # ax.set_xscale("symlog", linthresh=1)
     ax.set_yscale("log")
 
-    ax.set_xlim(-3e2, 3e4)
+    # ax.set_xlim(-3e2, 3e4)
+    ax.set_xlim(-1e2, 1e2)
     ax.set_ylim(4e-3, 2.5e4)
 
     ax.axvline(x=0, color="black", linewidth=2, zorder=1)
