@@ -151,7 +151,16 @@ def visualize(results: dict, current_method: str) -> None:
     ax.grid(visible=True, axis="y", alpha=0.3)
 
     plt.tight_layout()
-    plt.show()
+
+    # plt.show()
+
+    plt.savefig(
+        f"paper/figures/returns_over_parameter_{current_method}.png",
+        bbox_inches="tight",
+        dpi=300,
+    )
+
+    plt.close()
 
 
 def main() -> None:

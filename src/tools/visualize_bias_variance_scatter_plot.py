@@ -9,10 +9,12 @@
 import argparse
 import pickle
 from itertools import chain
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
+from tqdm import tqdm
 
 COLORS = {
     "avg": "#5591e1",
@@ -213,18 +215,15 @@ def visualize(results: dict, step: int) -> None:
 
     plt.tight_layout()
 
-    plt.show()
+    # plt.show()
 
-    # plt.savefig(
-    #     "paper/figures/tqc_figure.png",
-    #     bbox_inches="tight",
-    #     dpi=300,
-    # )
-    # plt.savefig(
-    #     "paper/figures/tqc_figure.svg",
-    #     bbox_inches="tight",
-    #     dpi=300,
-    # )
+    directory = "paper/figures/bias_variance_scatter_plot"
+    Path(directory).mkdir(parents=True, exist_ok=True)
+    plt.savefig(
+        f"{directory}/{step:05d}.png",
+        bbox_inches="tight",
+        dpi=100,
+    )
 
     plt.close()
 
@@ -241,7 +240,7 @@ def main() -> None:
         set(chain.from_iterable(values.keys() for values in results.values()))
     )
 
-    for step in all_steps:
+    for step in tqdm(all_steps):
         visualize(results, step)
 
 

@@ -9,12 +9,11 @@
 import argparse
 import pickle
 from itertools import chain
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from tqdm import tqdm
-
-from .utils import compute_stats
 
 COLORS = {
     "avg": "#5591e1",
@@ -23,9 +22,9 @@ COLORS = {
 }
 
 TITLES = {
-    "avg": r"AVG ($N$ Q-networks)",
-    "min": r"MIN ($N$ Q-networks)",
-    "tqc": r"TQC $N=2$ $M=25$ ($d$ dropped quantiles)",
+    "avg": "AVG ($N = {}$ Q-networks)",
+    "min": "MIN ($N = {}$ Q-networks)",
+    "tqc": "TQC $N=2$ $M=25$ ($d = {}$ dropped quantiles)",
 }
 
 
@@ -40,12 +39,11 @@ def visualize(results: dict, current_method: str, n: int, step: int) -> None:
 
     actions = np.array(data["actions"][0])
     predicted_qs = np.mean(np.array(data["predicted_qs"]), axis=0)
+
     policy_qs = np.mean(np.array(data["policy_qs"]), axis=0)
 
     mean_predicted = np.mean(predicted_qs)
     mean_policy = np.mean(policy_qs)
-    # bias_correction = mean_policy - mean_predicted
-    # predicted_qs_corrected = predicted_qs + bias_correction
 
     sampled_actions = np.linspace(-1, 1, 50)
     sampled_policy_qs = np.interp(sampled_actions, actions, policy_qs)
@@ -77,12 +75,27 @@ def visualize(results: dict, current_method: str, n: int, step: int) -> None:
 
     ax.set_xlabel("Action")
     ax.set_ylabel("Q-value")
-    ax.set_title(f"{TITLES[current_method]} - Step {step}", fontsize=24, pad=20)
+
+    ax.set_title(
+        f"{TITLES[current_method].format(n)} - Step {step}", fontsize=24, pad=20
+    )
     ax.grid(visible=True, alpha=0.25)
     ax.legend()
 
     plt.tight_layout()
-    plt.show()
+    # plt.show()
+
+    directory = (
+        f"paper/figures/q_function_evolution_over_action/{current_method}_{n}"
+    )
+    Path(directory).mkdir(parents=True, exist_ok=True)
+    plt.savefig(
+        f"{directory}/{step:05d}.png",
+        bbox_inches="tight",
+        dpi=100,
+    )
+
+    plt.close()
 
 
 def main() -> None:
