@@ -148,6 +148,7 @@ def visualize(results: dict, current_method: str) -> None:
     ax.grid(visible=True, axis="y", alpha=0.3)
 
     # ax.set_yscale("symlog", linthresh=1)
+    # ax.set_ylim(-3e2, 3e4)
     ax.set_ylim(-1e2, 1e2)
 
     plt.tight_layout()

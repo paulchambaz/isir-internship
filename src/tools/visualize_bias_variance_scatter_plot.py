@@ -36,10 +36,12 @@ def visualize(results: dict, step: int) -> None:
         for seed in range(len(data["predicted_qs"])):
             predicted_qs = data["predicted_qs"][seed]
             policy_qs = data["policy_qs"][seed]
+            # true_qs = data["true_qs"][seed]
             policy_action = data["policy_action"][seed]
             optimal_action = data["optimal_action"][seed]
 
             error = predicted_qs - policy_qs
+            # error = predicted_qs - true_qs
             biases.append(error.mean())
             variances.append(error.var())
             policy_errors.append(abs(policy_action - optimal_action))
@@ -61,12 +63,6 @@ def visualize(results: dict, step: int) -> None:
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # ax.set_xscale("symlog", linthresh=1)
-    ax.set_yscale("log")
-
-    # ax.set_xlim(-3e2, 3e4)
-    ax.set_xlim(-1e2, 1e2)
-    ax.set_ylim(4e-3, 2.5e4)
 
     ax.axvline(x=0, color="black", linewidth=2, zorder=1)
 
@@ -211,6 +207,13 @@ def visualize(results: dict, step: int) -> None:
     )
     legend.get_frame().set_facecolor("white")
     legend.get_frame().set_alpha(0.9)
+
+    ax.set_xscale("symlog", linthresh=1.8)
+    ax.set_xlim(-3e2, 3e4)
+    # ax.set_xlim(-1e2, 1e2)
+
+    ax.set_yscale("log")
+    ax.set_ylim(4e-3, 2.5e4)
 
     plt.draw()
 

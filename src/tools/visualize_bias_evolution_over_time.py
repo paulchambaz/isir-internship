@@ -105,6 +105,7 @@ def visualize(results: dict, current_method: str) -> None:
     ax.set_title(TITLES[current_method], fontsize=24, pad=20)
 
     # ax.set_yscale("symlog", linthresh=1)
+    # ax.set_ylim(-3e2, 3e4)
     ax.set_ylim(-1e2, 1e2)
 
     ax.set_xlabel("Training step")
