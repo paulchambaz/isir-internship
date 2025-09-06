@@ -33,9 +33,7 @@ TITLES = {
 }
 
 
-def visualize(results: dict, current_method: str) -> None:
-    fig, ax = plt.subplots(figsize=(12, 8))
-
+def visualize(results: dict, current_method: str, ax) -> None:
     params = []
     stats_list = []
 
@@ -66,8 +64,8 @@ def visualize(results: dict, current_method: str) -> None:
         min_val, q1, iqm, q3, max_val = stats
         iqm_values.append(iqm)
 
-        box_width = 0.25
-        whisker_width = 0.16
+        box_width = 0.5
+        whisker_width = 0.32
 
         ax.add_patch(
             plt.Rectangle(
@@ -143,7 +141,10 @@ def visualize(results: dict, current_method: str) -> None:
     ax.set_xticks(positions)
     ax.set_xticklabels([str(param) for param in params])
     ax.set_xlabel(f"${symbol}$")
-    ax.set_ylabel("Bias")
+
+    if current_method == "avg":
+        ax.set_ylabel("Bias")
+
     ax.set_title(TITLES[current_method], fontsize=24, pad=20)
     ax.grid(visible=True, axis="y", alpha=0.3)
 
@@ -151,17 +152,6 @@ def visualize(results: dict, current_method: str) -> None:
     # ax.set_ylim(-3e2, 3e4)
     ax.set_ylim(-1e2, 1e2)
 
-    plt.tight_layout()
-
-    # plt.show()
-
-    plt.savefig(
-        f"paper/figures/bias_over_parameter_{current_method}.png",
-        bbox_inches="tight",
-        dpi=300,
-    )
-
-    plt.close()
 
 
 def main() -> None:
@@ -179,9 +169,20 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    visualize(results, "avg")
-    visualize(results, "min")
-    visualize(results, "tqc")
+    fig, axes = plt.subplots(1, 3, figsize=(21, 8))
+
+    visualize(results, "avg", axes[0])
+    visualize(results, "min", axes[1])
+    visualize(results, "tqc", axes[2])
+
+    plt.tight_layout()
+    plt.savefig(
+        "paper/figures/bias_over_parameter_combined.png",
+        bbox_inches="tight",
+        dpi=300,
+    )
+    plt.show()
+    plt.close()
 
 
 if __name__ == "__main__":

@@ -55,6 +55,9 @@ visualize-bias-over-parameter *ARGS:
 visualize-returns-over-parameter *ARGS:
   @uv run python -m tools.visualize_returns_over_parameter {{ ARGS }}
 
+visualize-bias-returns-correlation *ARGS:
+  @uv run python -m tools.visualize_bias_returns_correlation {{ ARGS }}
+
 visualize-tqc-mdp *ARGS:
   @uv run python -m tools.visualize_tqc_mdp {{ ARGS }}
 

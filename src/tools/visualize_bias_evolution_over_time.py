@@ -57,9 +57,7 @@ TITLES = {
 }
 
 
-def visualize(results: dict, current_method: str) -> None:
-    fig, ax = plt.subplots(figsize=(12, 8))
-
+def visualize(results: dict, current_method: str, ax) -> None:
     for (method, n), step_data in results.items():
         if method != current_method:
             continue
@@ -98,7 +96,7 @@ def visualize(results: dict, current_method: str) -> None:
             zorder=4,
         )
 
-    plt.gca().xaxis.set_major_formatter(
+    ax.xaxis.set_major_formatter(
         FuncFormatter(lambda x, pos: f"{int(x / 1000)}k")
     )
 
@@ -109,22 +107,12 @@ def visualize(results: dict, current_method: str) -> None:
     ax.set_ylim(-1e2, 1e2)
 
     ax.set_xlabel("Training step")
-    ax.set_ylabel("Bias")
+
+    if current_method == "avg":
+        ax.set_ylabel("Bias")
 
     ax.grid(visible=True, alpha=0.25)
-    ax.legend()
-
-    plt.tight_layout()
-
-    # plt.show()
-
-    plt.savefig(
-        f"paper/figures/bias_evolution_over_time_{current_method}.png",
-        bbox_inches="tight",
-        dpi=300,
-    )
-
-    plt.close()
+    ax.legend(loc="upper left")
 
 
 def main() -> None:
@@ -142,9 +130,20 @@ def main() -> None:
         r"\usepackage{amsmath}\usepackage{amssymb}"
     )
 
-    visualize(results, "avg")
-    visualize(results, "min")
-    visualize(results, "tqc")
+    fig, axes = plt.subplots(1, 3, figsize=(21, 8))
+
+    visualize(results, "avg", axes[0])
+    visualize(results, "min", axes[1])
+    visualize(results, "tqc", axes[2])
+
+    plt.tight_layout()
+    plt.savefig(
+        "paper/figures/bias_evolution_over_time_combined.png",
+        bbox_inches="tight",
+        dpi=300,
+    )
+    # plt.show()
+    plt.close()
 
 
 if __name__ == "__main__":
