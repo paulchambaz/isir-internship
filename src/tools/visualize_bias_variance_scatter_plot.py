@@ -63,7 +63,6 @@ def visualize(results: dict, step: int) -> None:
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-
     ax.axvline(x=0, color="black", linewidth=2, zorder=1)
 
     ax.set_title(f"Training step: {step}", fontsize=24, pad=20)

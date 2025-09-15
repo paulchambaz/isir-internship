@@ -73,15 +73,3 @@ def where(
     pred: jnp.ndarray, case_true: jnp.ndarray, case_false: jnp.ndarray
 ) -> jnp.ndarray:
     return lerp(pred, case_true, case_false)
-
-
-def truncate(quantiles: jnp.ndarray, drop: int) -> jnp.ndarray:
-    batch_size, n_critics, n_quantiles = quantiles.shape
-
-    n_drop = n_critics * abs(drop)
-    n_kept = n_critics * n_quantiles - n_drop
-
-    quantiles_union = quantiles.reshape(batch_size, -1)
-    quantiles_sorted = jnp.sort(quantiles_union, axis=1)
-
-    return jnp.take(quantiles_sorted, jnp.arange(n_kept), axis=1)

@@ -3,7 +3,7 @@
 
 # Run the main program
 run:
-  @just train --env mountaincar --algo afutqc
+  @just train --env mountaincar --algo afcu
 
 # Run main training script
 train *ARGS:
@@ -314,4 +314,15 @@ reset: clean
 makegif:
   find . -maxdepth 1 ! -name "scaled_*" -regex '^\./[0-9]+\.png$' -exec sh -c 'magick "$1" -resize 1280x720 "scaled_$(basename "$1")"' _ {} \; && magick -limit memory 16GB -limit map 32GB scaled_*.png output.gif
 
+paper-compile:
+    cd paper/latex && pdflatex main.tex
+    cd paper/latex && biber main
+    cd paper/latex && pdflatex main.tex
+    cd paper/latex && pdflatex main.tex
 
+paper-watch:
+  just paper-clean
+  watchexec -r -w paper/latex -e tex,bib just paper-compile
+
+paper-clean:
+    cd paper/latex && rm -f *.aux *.bbl *.bcf *.blg *.log *.out *.run.xml *.synctex.gz *.toc *.dvi

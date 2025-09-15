@@ -196,7 +196,17 @@ def main() -> None:
     parser.add_argument(
         "--algo",
         type=str,
-        choices=["afu", "afup", "afutqc", "msac", "sac", "tqc", "top", "ndtop"],
+        choices=[
+            "afu",
+            "afcu",
+            "afup",
+            "afutqc",
+            "msac",
+            "sac",
+            "tqc",
+            "top",
+            "ndtop",
+        ],
         required=True,
         help="Algorithms",
     )
@@ -321,6 +331,23 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 n_critics=n_critics,
+                seed=seed,
+            )
+        case "afcu":
+            agent = algos.AFCU(
+                state_dim=state_dim,
+                action_dim=action_dim,
+                hidden_dims=hidden_dims,
+                replay_size=replay_size,
+                batch_size=batch_size,
+                critic_lr=lr,
+                policy_lr=lr,
+                temperature_lr=lr,
+                tau=tau,
+                gamma=gamma,
+                alpha=alpha,
+                rho=rho,
+                n_critics=1,
                 seed=seed,
             )
         case "afu":

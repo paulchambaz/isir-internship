@@ -13,9 +13,10 @@ __author__ = "Paul Chambaz"
 
 
 # from .afu3 import AFU
+from .afcu import AFCU
 from .afu import AFU
 from .afup import AFUP
-from .afutqc2 import AFUTQC
+from .afutqc import AFUTQC
 from .mlp import MLP
 from .msac import MSAC
 from .ndtop import NDTOP
@@ -26,12 +27,14 @@ from .top import TOP
 from .tqc import TQC
 
 __all__ = [
+    "AFCU",
     "AFU",
     "AFU1A",
     "AFUP",
     "AFUTQC",
     "MLP",
     "MSAC",
+    "NDTOP",
     "SAC",
     "TOP",
     "TQC",

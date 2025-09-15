@@ -153,7 +153,6 @@ def visualize(results: dict, current_method: str, ax) -> None:
     ax.set_ylim(-1e2, 1e2)
 
 
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, required=True)

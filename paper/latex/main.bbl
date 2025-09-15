@@ -1,0 +1,607 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global/global}
+    \entry{10.5555/3312046}{book}{}{}
+      \name{author}{2}{}{%
+        {{hash=eb920e5277d3d5fd0903f3cd41e11871}{%
+           family={Sutton},
+           familyi={S\bibinitperiod},
+           given={Richard\bibnamedelima S.},
+           giveni={R\bibinitperiod\bibinitdelim S\bibinitperiod}}}%
+        {{hash=32a0a208f8bcf56a13b0a8e618aa806a}{%
+           family={Barto},
+           familyi={B\bibinitperiod},
+           given={Andrew\bibnamedelima G.},
+           giveni={A\bibinitperiod\bibinitdelim G\bibinitperiod}}}%
+      }
+      \list{location}{1}{%
+        {Cambridge, MA, USA}%
+      }
+      \list{publisher}{1}{%
+        {A Bradford Book}%
+      }
+      \strng{namehash}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \strng{fullhash}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \strng{fullhashraw}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \strng{bibnamehash}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \strng{authorbibnamehash}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \strng{authornamehash}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \strng{authorfullhash}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \strng{authorfullhashraw}{c6212f1a1407d96a3d9f4fefbb07eade}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{isbn}{0262039249}
+      \field{title}{Reinforcement Learning: An Introduction}
+      \field{year}{2018}
+    \endentry
+    \entry{sutton1999policygradientmethodsreinforcement}{article}{}{}
+      \name{author}{4}{}{%
+        {{hash=eb920e5277d3d5fd0903f3cd41e11871}{%
+           family={Sutton},
+           familyi={S\bibinitperiod},
+           given={Richard\bibnamedelima S},
+           giveni={R\bibinitperiod\bibinitdelim S\bibinitperiod}}}%
+        {{hash=98aacd576623b869e8dc8532af60d3bd}{%
+           family={McAllester},
+           familyi={M\bibinitperiod},
+           given={David\bibnamedelima A},
+           giveni={D\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=0778520109d58859c98d71f3b7e75837}{%
+           family={Singh},
+           familyi={S\bibinitperiod},
+           given={Satinder\bibnamedelima P},
+           giveni={S\bibinitperiod\bibinitdelim P\bibinitperiod}}}%
+        {{hash=ad31daafb6eb6186dd51ffeae5196ec0}{%
+           family={Mansour},
+           familyi={M\bibinitperiod},
+           given={Yishay},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \strng{namehash}{176c86aa36fab51e81d033c2d8ea8cbe}
+      \strng{fullhash}{7b675e07bfef97b6c23c3e81e5694154}
+      \strng{fullhashraw}{7b675e07bfef97b6c23c3e81e5694154}
+      \strng{bibnamehash}{7b675e07bfef97b6c23c3e81e5694154}
+      \strng{authorbibnamehash}{7b675e07bfef97b6c23c3e81e5694154}
+      \strng{authornamehash}{176c86aa36fab51e81d033c2d8ea8cbe}
+      \strng{authorfullhash}{7b675e07bfef97b6c23c3e81e5694154}
+      \strng{authorfullhashraw}{7b675e07bfef97b6c23c3e81e5694154}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Advances in neural information processing systems}
+      \field{title}{Policy gradient methods for reinforcement learning with function approximation}
+      \field{volume}{12}
+      \field{year}{1999}
+    \endentry
+    \entry{thrun1993issuesactionselection}{article}{}{}
+      \name{author}{2}{}{%
+        {{hash=5112ea130eadef0764fce0145b8b9f91}{%
+           family={Thrun},
+           familyi={T\bibinitperiod},
+           given={Sebastian},
+           giveni={S\bibinitperiod}}}%
+        {{hash=66b090e34ebff790c43d64e6788e90a0}{%
+           family={Schwartz},
+           familyi={S\bibinitperiod},
+           given={Anton},
+           giveni={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{ba63c30d7cf7326754db8965dfd97fb3}
+      \strng{fullhash}{ba63c30d7cf7326754db8965dfd97fb3}
+      \strng{fullhashraw}{ba63c30d7cf7326754db8965dfd97fb3}
+      \strng{bibnamehash}{ba63c30d7cf7326754db8965dfd97fb3}
+      \strng{authorbibnamehash}{ba63c30d7cf7326754db8965dfd97fb3}
+      \strng{authornamehash}{ba63c30d7cf7326754db8965dfd97fb3}
+      \strng{authorfullhash}{ba63c30d7cf7326754db8965dfd97fb3}
+      \strng{authorfullhashraw}{ba63c30d7cf7326754db8965dfd97fb3}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Proceedings of the 1993 connectionist models summer school}
+      \field{title}{Issues in using function approximation for reinforcement learning}
+      \field{year}{1993}
+    \endentry
+    \entry{hasselt2010doubleqlearning}{article}{}{}
+      \name{author}{1}{}{%
+        {{hash=8f907b286e4dfa23c758547d1987830b}{%
+           family={Van\bibnamedelima Hasselt},
+           familyi={V\bibinitperiod\bibinitdelim H\bibinitperiod},
+           given={Hado},
+           giveni={H\bibinitperiod}}}%
+      }
+      \strng{namehash}{8f907b286e4dfa23c758547d1987830b}
+      \strng{fullhash}{8f907b286e4dfa23c758547d1987830b}
+      \strng{fullhashraw}{8f907b286e4dfa23c758547d1987830b}
+      \strng{bibnamehash}{8f907b286e4dfa23c758547d1987830b}
+      \strng{authorbibnamehash}{8f907b286e4dfa23c758547d1987830b}
+      \strng{authornamehash}{8f907b286e4dfa23c758547d1987830b}
+      \strng{authorfullhash}{8f907b286e4dfa23c758547d1987830b}
+      \strng{authorfullhashraw}{8f907b286e4dfa23c758547d1987830b}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Advances in neural information processing systems}
+      \field{title}{Double Q-learning}
+      \field{volume}{23}
+      \field{year}{2010}
+    \endentry
+    \entry{fujimoto2018addressingfunctionapproximationerror}{misc}{}{}
+      \name{author}{3}{}{%
+        {{hash=064fb8795fb3fe6537e4d29fc8578ec4}{%
+           family={Fujimoto},
+           familyi={F\bibinitperiod},
+           given={Scott},
+           giveni={S\bibinitperiod}}}%
+        {{hash=f2db100b30806f7c8e894892db68dadb}{%
+           family={Hoof},
+           familyi={H\bibinitperiod},
+           given={Herke},
+           giveni={H\bibinitperiod},
+           prefix={van},
+           prefixi={v\bibinitperiod}}}%
+        {{hash=a5137015bf373eff6cd1b6a96b145c3c}{%
+           family={Meger},
+           familyi={M\bibinitperiod},
+           given={David},
+           giveni={D\bibinitperiod}}}%
+      }
+      \strng{namehash}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \strng{fullhash}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \strng{fullhashraw}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \strng{bibnamehash}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \strng{authorbibnamehash}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \strng{authornamehash}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \strng{authorfullhash}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \strng{authorfullhashraw}{fa31fcf8611ccec7d2a280d8c08326e7}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.AI}
+      \field{eprinttype}{arXiv}
+      \field{title}{Addressing Function Approximation Error in Actor-Critic Methods}
+      \field{year}{2018}
+      \verb{eprint}
+      \verb 1802.09477
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/1802.09477
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/1802.09477
+      \endverb
+    \endentry
+    \entry{kuznetsov2020controllingoverestimationbiastruncated}{misc}{}{}
+      \name{author}{4}{}{%
+        {{hash=2e5165e8683cca0899e1e7892dd94469}{%
+           family={Kuznetsov},
+           familyi={K\bibinitperiod},
+           given={Arsenii},
+           giveni={A\bibinitperiod}}}%
+        {{hash=0194d68efbf4085579e80a4b8e558b7f}{%
+           family={Shvechikov},
+           familyi={S\bibinitperiod},
+           given={Pavel},
+           giveni={P\bibinitperiod}}}%
+        {{hash=59929908fd5827c99e14ddf49ea96c79}{%
+           family={Grishin},
+           familyi={G\bibinitperiod},
+           given={Alexander},
+           giveni={A\bibinitperiod}}}%
+        {{hash=f1c8fe7ad4d22499bdaaa3917e11783d}{%
+           family={Vetrov},
+           familyi={V\bibinitperiod},
+           given={Dmitry},
+           giveni={D\bibinitperiod}}}%
+      }
+      \strng{namehash}{7b5d3e8c41a233cb29d69ff49e4c5368}
+      \strng{fullhash}{cff9800145ee7167a236b7f43d37191a}
+      \strng{fullhashraw}{cff9800145ee7167a236b7f43d37191a}
+      \strng{bibnamehash}{cff9800145ee7167a236b7f43d37191a}
+      \strng{authorbibnamehash}{cff9800145ee7167a236b7f43d37191a}
+      \strng{authornamehash}{7b5d3e8c41a233cb29d69ff49e4c5368}
+      \strng{authorfullhash}{cff9800145ee7167a236b7f43d37191a}
+      \strng{authorfullhashraw}{cff9800145ee7167a236b7f43d37191a}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.LG}
+      \field{eprinttype}{arXiv}
+      \field{title}{Controlling Overestimation Bias with Truncated Mixture of Continuous Distributional Quantile Critics}
+      \field{year}{2020}
+      \verb{eprint}
+      \verb 2005.04269
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2005.04269
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2005.04269
+      \endverb
+    \endentry
+    \entry{dabney2017distributionalreinforcementlearningquantile}{misc}{}{}
+      \name{author}{4}{}{%
+        {{hash=d5a44cbf0d05e4c50b512bb0c1368d2f}{%
+           family={Dabney},
+           familyi={D\bibinitperiod},
+           given={Will},
+           giveni={W\bibinitperiod}}}%
+        {{hash=bbebaeb4d3852537e477b7749599505f}{%
+           family={Rowland},
+           familyi={R\bibinitperiod},
+           given={Mark},
+           giveni={M\bibinitperiod}}}%
+        {{hash=eae3aa0ab9cb8b33a1ade80739e79e57}{%
+           family={Bellemare},
+           familyi={B\bibinitperiod},
+           given={Marc\bibnamedelima G.},
+           giveni={M\bibinitperiod\bibinitdelim G\bibinitperiod}}}%
+        {{hash=5d8fa91764a27bf97b87fdcac885745d}{%
+           family={Munos},
+           familyi={M\bibinitperiod},
+           given={Rémi},
+           giveni={R\bibinitperiod}}}%
+      }
+      \strng{namehash}{f2bf62517cb27cbf43791ffb6570b7e6}
+      \strng{fullhash}{1fde9544ecf3ca00ce27964ddaceb057}
+      \strng{fullhashraw}{1fde9544ecf3ca00ce27964ddaceb057}
+      \strng{bibnamehash}{1fde9544ecf3ca00ce27964ddaceb057}
+      \strng{authorbibnamehash}{1fde9544ecf3ca00ce27964ddaceb057}
+      \strng{authornamehash}{f2bf62517cb27cbf43791ffb6570b7e6}
+      \strng{authorfullhash}{1fde9544ecf3ca00ce27964ddaceb057}
+      \strng{authorfullhashraw}{1fde9544ecf3ca00ce27964ddaceb057}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.AI}
+      \field{eprinttype}{arXiv}
+      \field{title}{Distributional Reinforcement Learning with Quantile Regression}
+      \field{year}{2017}
+      \verb{eprint}
+      \verb 1710.10044
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/1710.10044
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/1710.10044
+      \endverb
+    \endentry
+    \entry{moskovitz2022tacticaloptimismpessimismdeep}{misc}{}{}
+      \name{author}{5}{}{%
+        {{hash=d6acb250d36a0b7b0d3abef3ea95eb29}{%
+           family={Moskovitz},
+           familyi={M\bibinitperiod},
+           given={Ted},
+           giveni={T\bibinitperiod}}}%
+        {{hash=b84fe489dbc160ae696acf6c7ca579fc}{%
+           family={Parker-Holder},
+           familyi={P\bibinithyphendelim H\bibinitperiod},
+           given={Jack},
+           giveni={J\bibinitperiod}}}%
+        {{hash=47b9c81ab07b9cbf51396d137e22c693}{%
+           family={Pacchiano},
+           familyi={P\bibinitperiod},
+           given={Aldo},
+           giveni={A\bibinitperiod}}}%
+        {{hash=1d5a8d0a544c04a3c2bf1f1a2547d9ab}{%
+           family={Arbel},
+           familyi={A\bibinitperiod},
+           given={Michael},
+           giveni={M\bibinitperiod}}}%
+        {{hash=8a36116840c7ee55901618c95fd08a58}{%
+           family={Jordan},
+           familyi={J\bibinitperiod},
+           given={Michael\bibnamedelima I.},
+           giveni={M\bibinitperiod\bibinitdelim I\bibinitperiod}}}%
+      }
+      \strng{namehash}{2c1743f23ffc1fe3cf62252f0d870d1c}
+      \strng{fullhash}{5fc1aa330c3226a8602fb48321205d51}
+      \strng{fullhashraw}{5fc1aa330c3226a8602fb48321205d51}
+      \strng{bibnamehash}{5fc1aa330c3226a8602fb48321205d51}
+      \strng{authorbibnamehash}{5fc1aa330c3226a8602fb48321205d51}
+      \strng{authornamehash}{2c1743f23ffc1fe3cf62252f0d870d1c}
+      \strng{authorfullhash}{5fc1aa330c3226a8602fb48321205d51}
+      \strng{authorfullhashraw}{5fc1aa330c3226a8602fb48321205d51}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.LG}
+      \field{eprinttype}{arXiv}
+      \field{title}{Tactical Optimism and Pessimism for Deep Reinforcement Learning}
+      \field{year}{2022}
+      \verb{eprint}
+      \verb 2102.03765
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2102.03765
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2102.03765
+      \endverb
+    \endentry
+    \entry{ji2024seizingserendipityexploitingvalue}{misc}{}{}
+      \name{author}{6}{}{%
+        {{hash=104a2382413c2997862f88becf87beb3}{%
+           family={Ji},
+           familyi={J\bibinitperiod},
+           given={Tianying},
+           giveni={T\bibinitperiod}}}%
+        {{hash=78fbe46f8fb763daef158e511a35dbb2}{%
+           family={Luo},
+           familyi={L\bibinitperiod},
+           given={Yu},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=59eaf27c32447b7323877072f8533d7c}{%
+           family={Sun},
+           familyi={S\bibinitperiod},
+           given={Fuchun},
+           giveni={F\bibinitperiod}}}%
+        {{hash=d7cace90be75a83bf11e7189cc4b1f62}{%
+           family={Zhan},
+           familyi={Z\bibinitperiod},
+           given={Xianyuan},
+           giveni={X\bibinitperiod}}}%
+        {{hash=701b522e82b25750a7fbeaa90161cfa6}{%
+           family={Zhang},
+           familyi={Z\bibinitperiod},
+           given={Jianwei},
+           giveni={J\bibinitperiod}}}%
+        {{hash=0b03520228e266e76ff30c18b636e622}{%
+           family={Xu},
+           familyi={X\bibinitperiod},
+           given={Huazhe},
+           giveni={H\bibinitperiod}}}%
+      }
+      \strng{namehash}{55ac73be0f1d6fc542b02e0de9582634}
+      \strng{fullhash}{48e92090041d1fea120822599b92d3e3}
+      \strng{fullhashraw}{48e92090041d1fea120822599b92d3e3}
+      \strng{bibnamehash}{48e92090041d1fea120822599b92d3e3}
+      \strng{authorbibnamehash}{48e92090041d1fea120822599b92d3e3}
+      \strng{authornamehash}{55ac73be0f1d6fc542b02e0de9582634}
+      \strng{authorfullhash}{48e92090041d1fea120822599b92d3e3}
+      \strng{authorfullhashraw}{48e92090041d1fea120822599b92d3e3}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.LG}
+      \field{eprinttype}{arXiv}
+      \field{title}{Seizing Serendipity: Exploiting the Value of Past Success in Off-Policy Actor-Critic}
+      \field{year}{2024}
+      \verb{eprint}
+      \verb 2306.02865
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2306.02865
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2306.02865
+      \endverb
+    \endentry
+    \entry{haarnoja2019softactorcriticalgorithmsapplications}{misc}{}{}
+      \name{author}{11}{}{%
+        {{hash=45b14f55dd7ae28cb6cb2e23e4a168b9}{%
+           family={Haarnoja},
+           familyi={H\bibinitperiod},
+           given={Tuomas},
+           giveni={T\bibinitperiod}}}%
+        {{hash=519033a7338e5ef684c77d4d04748a4a}{%
+           family={Zhou},
+           familyi={Z\bibinitperiod},
+           given={Aurick},
+           giveni={A\bibinitperiod}}}%
+        {{hash=2bf28b92c31c717feee2c15487657b25}{%
+           family={Hartikainen},
+           familyi={H\bibinitperiod},
+           given={Kristian},
+           giveni={K\bibinitperiod}}}%
+        {{hash=641a3f5d5ce834c4b56fb672c5df0207}{%
+           family={Tucker},
+           familyi={T\bibinitperiod},
+           given={George},
+           giveni={G\bibinitperiod}}}%
+        {{hash=d235634814ed266793a4de24b71955e6}{%
+           family={Ha},
+           familyi={H\bibinitperiod},
+           given={Sehoon},
+           giveni={S\bibinitperiod}}}%
+        {{hash=aaa7cb90b2e1cc2079b5e8a087a903c9}{%
+           family={Tan},
+           familyi={T\bibinitperiod},
+           given={Jie},
+           giveni={J\bibinitperiod}}}%
+        {{hash=bbba0ccb50436105a4134d24509b62d7}{%
+           family={Kumar},
+           familyi={K\bibinitperiod},
+           given={Vikash},
+           giveni={V\bibinitperiod}}}%
+        {{hash=fde29d8aa12ec2aa9ab89c495df350fb}{%
+           family={Zhu},
+           familyi={Z\bibinitperiod},
+           given={Henry},
+           giveni={H\bibinitperiod}}}%
+        {{hash=d0792eb04b685020eafedbc871aeb84f}{%
+           family={Gupta},
+           familyi={G\bibinitperiod},
+           given={Abhishek},
+           giveni={A\bibinitperiod}}}%
+        {{hash=e28d4ee199593959d8c29980a64f1974}{%
+           family={Abbeel},
+           familyi={A\bibinitperiod},
+           given={Pieter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=c9545da54b33744da25943cdf66eadac}{%
+           family={Levine},
+           familyi={L\bibinitperiod},
+           given={Sergey},
+           giveni={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{b8c131de85c5000ff50df59a4d062227}
+      \strng{fullhash}{c6ac1e78375b5b1cb1c472544f2557df}
+      \strng{fullhashraw}{c6ac1e78375b5b1cb1c472544f2557df}
+      \strng{bibnamehash}{c6ac1e78375b5b1cb1c472544f2557df}
+      \strng{authorbibnamehash}{c6ac1e78375b5b1cb1c472544f2557df}
+      \strng{authornamehash}{b8c131de85c5000ff50df59a4d062227}
+      \strng{authorfullhash}{c6ac1e78375b5b1cb1c472544f2557df}
+      \strng{authorfullhashraw}{c6ac1e78375b5b1cb1c472544f2557df}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.LG}
+      \field{eprinttype}{arXiv}
+      \field{title}{Soft Actor-Critic Algorithms and Applications}
+      \field{year}{2019}
+      \verb{eprint}
+      \verb 1812.05905
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/1812.05905
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/1812.05905
+      \endverb
+    \endentry
+    \entry{perringilbert2024afuactorfreecriticupdates}{misc}{}{}
+      \name{author}{1}{}{%
+        {{hash=ef73dbe0666eead66b7a8346e5ce0460}{%
+           family={Perrin-Gilbert},
+           familyi={P\bibinithyphendelim G\bibinitperiod},
+           given={Nicolas},
+           giveni={N\bibinitperiod}}}%
+      }
+      \strng{namehash}{ef73dbe0666eead66b7a8346e5ce0460}
+      \strng{fullhash}{ef73dbe0666eead66b7a8346e5ce0460}
+      \strng{fullhashraw}{ef73dbe0666eead66b7a8346e5ce0460}
+      \strng{bibnamehash}{ef73dbe0666eead66b7a8346e5ce0460}
+      \strng{authorbibnamehash}{ef73dbe0666eead66b7a8346e5ce0460}
+      \strng{authornamehash}{ef73dbe0666eead66b7a8346e5ce0460}
+      \strng{authorfullhash}{ef73dbe0666eead66b7a8346e5ce0460}
+      \strng{authorfullhashraw}{ef73dbe0666eead66b7a8346e5ce0460}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.LG}
+      \field{eprinttype}{arXiv}
+      \field{title}{AFU: Actor-Free critic Updates in off-policy RL for continuous control}
+      \field{year}{2024}
+      \verb{eprint}
+      \verb 2404.16159
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2404.16159
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2404.16159
+      \endverb
+    \endentry
+    \entry{mnih2015humanlevelcontroldeepreinforcement}{article}{}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{10}{}{%
+        {{hash=f7d23cfe4ca0e6bf7a8c251bfa78aca6}{%
+           family={Mnih},
+           familyi={M\bibinitperiod},
+           given={Volodymyr},
+           giveni={V\bibinitperiod}}}%
+        {{hash=481308b301166b521c74fde6566e97e6}{%
+           family={Kavukcuoglu},
+           familyi={K\bibinitperiod},
+           given={Koray},
+           giveni={K\bibinitperiod}}}%
+        {{hash=89dbd30410c2085cd059f32c57d4593e}{%
+           family={Silver},
+           familyi={S\bibinitperiod},
+           given={David},
+           giveni={D\bibinitperiod}}}%
+        {{hash=677dfee41a39b5ac7e138f5ce14467e9}{%
+           family={Rusu},
+           familyi={R\bibinitperiod},
+           given={Andrei\bibnamedelima A.},
+           giveni={A\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=1cbd91f7404b2298b46bb46c47c08251}{%
+           family={Veness},
+           familyi={V\bibinitperiod},
+           given={Joel},
+           giveni={J\bibinitperiod}}}%
+        {{hash=eae3aa0ab9cb8b33a1ade80739e79e57}{%
+           family={Bellemare},
+           familyi={B\bibinitperiod},
+           given={Marc\bibnamedelima G.},
+           giveni={M\bibinitperiod\bibinitdelim G\bibinitperiod}}}%
+        {{hash=dfca94b0427da7f9088af596e23b46c0}{%
+           family={Graves},
+           familyi={G\bibinitperiod},
+           given={Alex},
+           giveni={A\bibinitperiod}}}%
+        {{hash=9449802bcb467309c0ebced658096818}{%
+           family={Riedmiller},
+           familyi={R\bibinitperiod},
+           given={Martin},
+           giveni={M\bibinitperiod}}}%
+        {{hash=813789b20f2562f4e5bff05ee364ccd1}{%
+           family={Fienberg},
+           familyi={F\bibinitperiod},
+           given={Andreas\bibnamedelima K.},
+           giveni={A\bibinitperiod\bibinitdelim K\bibinitperiod}}}%
+        {{hash=46cc21fb5dec973c05ceb0f321e02ca0}{%
+           family={Ostrovski},
+           familyi={O\bibinitperiod},
+           given={Georg},
+           giveni={G\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {Nature Publishing Group}%
+      }
+      \strng{namehash}{aff24b211b34cdd515b2fd148ce0c920}
+      \strng{fullhash}{28354f58daffcbda7f216350249e6562}
+      \strng{fullhashraw}{28354f58daffcbda7f216350249e6562}
+      \strng{bibnamehash}{28354f58daffcbda7f216350249e6562}
+      \strng{authorbibnamehash}{28354f58daffcbda7f216350249e6562}
+      \strng{authornamehash}{aff24b211b34cdd515b2fd148ce0c920}
+      \strng{authorfullhash}{28354f58daffcbda7f216350249e6562}
+      \strng{authorfullhashraw}{28354f58daffcbda7f216350249e6562}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Nature}
+      \field{number}{7540}
+      \field{title}{Human-level control through deep reinforcement learning}
+      \field{volume}{518}
+      \field{year}{2015}
+      \field{pages}{529\bibrangedash 533}
+      \range{pages}{5}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+
