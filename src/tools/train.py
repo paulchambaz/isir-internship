@@ -84,11 +84,11 @@ def train(
                     agent_history[result_id] = copy.deepcopy(agent.get_state())
 
                     if result_id % 100 == 0:
-                        with open(
-                            f"outputs/agent_history_{checkpoint_counter}.pk",
-                            "wb",
-                        ) as f:
-                            pickle.dump(agent_history, f)
+                        # with open(
+                        #     f"outputs/agent_history_{checkpoint_counter}.pk",
+                        #     "wb",
+                        # ) as f:
+                        #     pickle.dump(agent_history, f)
                         agent_history = {}
                         gc.collect()
                         checkpoint_counter += 1
@@ -189,6 +189,42 @@ def main() -> None:
             "name": "Swimmer-v5",
             "kwargs": {},
             "steps": 400_000,
+        },
+
+        "ant": {
+            "name": "Ant-v5",
+            "kwargs": {},
+            "steps": 3_000_000,
+        },
+        "halfcheetah": {
+            "name": "HalfCheetah-v5",
+            "kwargs": {},
+            "steps": 5_000_000,
+        },
+        "hopper": {
+            "name": "Hopper-v5",
+            "kwargs": {},
+            "steps": 3_000_000,
+        },
+        "humanoid": {
+            "name": "Humanoid-v5",
+            "kwargs": {},
+            "steps": 3_000_000,
+        },
+        "inverteddoublependulum": {
+            "name": "InvertedDoublePendulum-v5",
+            "kwargs": {},
+            "steps": 1_000_000,
+        },
+        "reacher": {
+            "name": "Reacher-v5",
+            "kwargs": {},
+            "steps": 1_000_000,
+        },
+        "walker2d": {
+            "name": "Walker2d-v5",
+            "kwargs": {},
+            "steps": 3_000_000,
         },
     }
 
@@ -472,9 +508,9 @@ def main() -> None:
         count=args.runs,
     )
 
-    with open("outputs/agent.pt", "wb") as f:
+    with open(f"outputs/agent_{args.env}_{args.algo}.pt", "wb") as f:
         pickle.dump(trained_agent.get_state(), f)
-    with open("outputs/history.pk", "wb") as f:
+    with open(f"outputs/history_{args.env}_{args.algo}.pk", "wb") as f:
         pickle.dump(history, f)
 
     train_env.close()
