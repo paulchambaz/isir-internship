@@ -383,7 +383,7 @@ def main() -> None:
                 gamma=gamma,
                 alpha=alpha,
                 rho=rho,
-                n_critics=1,
+                n_critics=2,
                 seed=seed,
             )
         case "afu":
@@ -501,7 +501,7 @@ def main() -> None:
         train_env=train_env,
         test_env=test_env,
         steps=steps,
-        warmup=10_000,
+        warmup=0,
         train_freq=4,
         gradient_steps=4,
         test_freq=500,

@@ -352,7 +352,7 @@ class AFU(RLAlgo):
         """Compute combined loss for Q and V networks with V-A constraints."""
 
         v_targets_list = self.v_network.apply(v_target_params, next_states)
-        v_targets = jnp.mean(v_targets_list, axis=0)
+        v_targets = jnp.min(v_targets_list, axis=0)
         q_targets = rewards + self.gamma * (1.0 - dones) * v_targets
 
         v_values = self.v_network.apply(v_params, states)

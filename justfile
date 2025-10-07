@@ -273,9 +273,9 @@ compare-afu-afcu ENV:
   just train --env {{ ENV }} --algo afu
 
 comparison-afu-afcu:
-  # @just compare-afu-afcu ant
-  # @just compare-afu-afcu halfcheetah
-  # @just compare-afu-afcu hopper
+  just compare-afu-afcu ant
+  just compare-afu-afcu halfcheetah
+  just compare-afu-afcu hopper
   # just compare-afu-afcu humanoid
   just compare-afu-afcu inverteddoublependulum
   just compare-afu-afcu reacher
